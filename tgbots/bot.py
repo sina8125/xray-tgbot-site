@@ -13,10 +13,10 @@ import random
 
 TOKEN: Final = "5976056923:AAF5UCAnNTg19EOqtJOvVdgSVBj_o-bwhKA"
 ADMIN: Final = 179102335
+PROXY: Final = "http://127.0.0.1:2081"
 USER_FILE: Final = "/home/sina/users.txt"
 FORMAT_FILE: Final = "/home/sina/format.txt"
 NEW_FILE: Final = "/root/new.txt"
-PROXY: Final = "http://127.0.0.1:2081"
 HEADER: list = ["telewebion.com", "zula.ir"]
 
 

@@ -10,7 +10,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 
-from .bot import app
+from .bots.bot import app
+from .models import TelegramUser
 
 PROXY = "http://127.0.0.1:2081"
 
@@ -30,9 +31,29 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 class StartBot(APIView):
     def post(self, request):
         print(request.body)
-        asyncio.run(self.start(request))
-        return Response(status=status.HTTP_200_OK)
+        request_body = json.loads(request.body)
+        # print()
+        # user = TelegramUser.objects.get(telegram_id=request_body['message']['from']['id'])
+        # user.update_last_message_time()
+        user, created = TelegramUser.objects.update_or_create(telegram_id=request_body['message']['from']['id'],
+                                                              defaults={
+                                                                  'telegram_first_name': request_body['message'][
+                                                                      'from'].get(
+                                                                      'first_name'),
+                                                                  'telegram_last_name': request_body['message'][
+                                                                      'from'].get(
+                                                                      'last_name'),
+                                                                  'telegram_username': request_body['message'][
+                                                                      'from'].get(
+                                                                      'username')
+                                                              })
+        request_body['message']['from']['user_in_model'] = user
+        update = Update.de_json(data=request_body, bot=app.application.bot)
 
-    async def start(self, request):
-        async with app:
-            await app.process_update(Update.de_json(data=json.loads(request.body), bot=app.bot))
+        # print(app.hi)
+        async def start():
+            async with app.application as application:
+                await application.process_update(update)
+
+        asyncio.run(start())
+        return Response(status=status.HTTP_200_OK)
