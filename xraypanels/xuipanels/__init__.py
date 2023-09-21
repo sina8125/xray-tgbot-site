@@ -1,1 +1,1 @@
-from xui import XUI
+from .xui import XUI

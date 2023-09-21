@@ -1,6 +1,6 @@
-from login import Login
-from inbounds import Inbounds
-from clients import Clients
+from xraypanels.xuipanels.login import Login
+from xraypanels.xuipanels.inbounds import Inbounds
+from xraypanels.xuipanels.clients import Clients
 
 
 class XUI(Login, Inbounds, Clients):
@@ -8,4 +8,4 @@ class XUI(Login, Inbounds, Clients):
         self.address = address
         self.https = https
         self.session_cookie = session_cookie
-        self.api_url = f'{self.address}/panel/api/inbounds/'
+        self.api_url = f'{self.address}/panel/api/inbounds'

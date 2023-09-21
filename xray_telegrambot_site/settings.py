@@ -12,6 +12,10 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from os.path import normpath, join
 from pathlib import Path
 
+from . import local_settings
+
+from xraypanels import XUI
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -120,16 +124,19 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
-
 MEDIA_ROOT = normpath(join(BASE_DIR, 'media'))
 MEDIA_URL = '/media/'
 # Default primary key field type
-# https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
+# https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-fieldبعد
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-WEBHOOK_DOMAIN = 'https://2b5c-5-124-7-66.ngrok-free.app'
+WEBHOOK_DOMAIN = local_settings.WEBHOOK_DOMAIN
+TOKEN = local_settings.TOKEN
+PANEL = XUI(local_settings.PANEL_ADDRESS)
+PANEL.login(username=local_settings.PANEL_USERNAME, password=local_settings.PANEL_PASSWORD)
 
 CRONJOBS = [
-    ('*/10 * * * * *', 'tgbots.bots.bot.say_hi', '>> /home/sina/file.log')
+    # ('*/10 * * * * *', 'tgbots.bots.bot.say_hi', '>> /home/sina/file.log')
 ]
+

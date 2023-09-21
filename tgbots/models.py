@@ -35,3 +35,7 @@ class TelegramUser(models.Model):
     def update_last_message_time(self):
         self.last_message_time = timezone.now()
         self.save(update_fields=['last_message_time'])
+
+    def get_telegram_full_name(self):
+        full_name = "%s %s" % (self.telegram_first_name or '', self.telegram_last_name or '')
+        return full_name.strip()

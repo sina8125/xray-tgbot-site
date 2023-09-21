@@ -4,10 +4,9 @@ import xraypanels.xuipanels
 
 
 class Login:
-    def login(self: xraypanels.xuipanels.XUI, username: str, password: str):
+    def login(self: "xraypanels.xuipanels.XUI", username: str, password: str):
         if self.session_cookie:
             return True
-
         login_request = requests.post(url=f'{self.address}/login/',
                                       cookies=None,
                                       data={'username': username, 'password': password},

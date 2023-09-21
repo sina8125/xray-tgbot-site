@@ -13,3 +13,8 @@ class UserMenuEnum(Enum):
 
 class UserUpdatedConfig(Enum):
     SEND_CONFIG = 0
+
+
+class UserConfigInfo(Enum):
+    SEND_CONFIG = 0
+    BACK_TO_MENU = 1

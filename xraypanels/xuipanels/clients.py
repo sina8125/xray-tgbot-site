@@ -6,10 +6,10 @@ import xraypanels.xuipanels
 
 
 class Clients:
-    def get_client(self: xraypanels.xuipanels.XUI,
+    def get_client(self: "xraypanels.xuipanels.XUI",
                    email: str = False,
                    uuid: str = False,
-                   inbound_id: int = None):
+                   inbound_id: int = False):
         if not email and not uuid:
             return False, None
 
@@ -26,7 +26,7 @@ class Clients:
                     return client, inbound
         return False, None
 
-    def get_client_traffics_by_email(self: xraypanels.xuipanels.XUI, email: str):
+    def get_client_traffics_by_email(self: "xraypanels.xuipanels.XUI", email: str):
         if not email:
             return False
         client_traffics_request = requests.get(url=f'{self.api_url}/getClientTraffics/{email}/',
@@ -38,17 +38,16 @@ class Clients:
         else:
             return False
 
-    def get_client_traffics_by_uuid(self: xraypanels.xuipanels.XUI, uuid: str, inbound_id: int = None):
+    def get_client_traffics_by_uuid(self: "xraypanels.xuipanels.XUI", uuid: str, inbound_id: int = None):
         if not uuid:
             return False
         client, inbound = self.get_client(uuid=uuid, inbound_id=inbound_id)
-
         for client_traffics in inbound['clientStats']:
             if client_traffics['email'] == client['email']:
-                return client_traffics
+                return client_traffics, client, inbound
         return False
 
-    def add_client(self: xraypanels.xuipanels.XUI,
+    def add_client(self: "xraypanels.xuipanels.XUI",
                    inbound_id: int,
                    email: str,
                    uuid: str,
@@ -73,11 +72,10 @@ class Clients:
                     "tgId": telegram_id,
                     'limitIp': ip_limit,
                     'totalGB': total_gb,
-                    'expiryTime': expire_time,
+                    'expiryTime': int(expire_time),
                 }
             ]
         }
-
         add_client_request = requests.post(url=f'{self.api_url}/addClient/',
                                            data={'id': inbound_id, 'settings': json.dumps(settings)},
                                            cookies={'session': self.session_cookie},
@@ -87,10 +85,10 @@ class Clients:
             return True
         return False
 
-    def update_client(self: xraypanels.xuipanels.XUI,
-                      inbound_id: int,
+    def update_client(self: "xraypanels.xuipanels.XUI",
                       email: str,
                       uuid: str,
+                      inbound_id: int = None,
                       total_gb: int = 0,
                       expire_time: int = 0,
                       ip_limit: int = 0,
@@ -98,9 +96,9 @@ class Clients:
                       subscription_id: str = '',
                       telegram_id: str = ''
                       ):
-        if not inbound_id or not email or not uuid:
+        if not email or not uuid:
             return False
-        client, inbound = self.get_client(email=email, uuid=uuid, inbound_id=inbound_id)
+        client, inbound = self.get_client(email=email, uuid=uuid, inbound_id=inbound_id or False)
         if not client:
             return False
         settings = {
@@ -114,13 +112,13 @@ class Clients:
                     "tgId": telegram_id,
                     'limitIp': ip_limit,
                     'totalGB': total_gb,
-                    'expiryTime': expire_time,
+                    'expiryTime': int(expire_time),
                 }
             ]
         }
 
         update_client_request = requests.post(url=f'{self.api_url}/updateClient/{client["id"]}/',
-                                              data={'id': inbound_id, 'settings': json.dumps(settings)},
+                                              data={'id': inbound['id'], 'settings': json.dumps(settings)},
                                               cookies={'session': self.session_cookie},
                                               verify=self.https)
         if (update_client_request.status_code // 100 == 2
