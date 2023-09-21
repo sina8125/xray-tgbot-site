@@ -58,10 +58,13 @@ class UserMenu:
                 UserOrAdminEnum.USER: UserOrAdminEnum.USER
             }
         )
+
         handlers_list.append(update_handler)
         handlers_list.append(config_info_handler)
         handlers_list.append(MessageHandler(filters.Regex(f"^{button_values['get_config_info']}$"), self.config_info))
-        handlers_list.append(MessageHandler(filters.Regex(f"^{button_values['admin_panel']}$"), self.admin_panel))
+        handlers_list.append(
+            MessageHandler(filters.Regex(f"^{button_values['admin_panel']}$") & (self.admin_filter or None),
+                           self.admin_panel))
         return handlers_list
 
     async def start_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -70,7 +73,7 @@ class UserMenu:
         user = await sync_to_async(lambda: telegram_user.user)()
         if user and user.is_staff:
             keyboard.append([button_values['admin_panel']])
-        if context.user_data.get('start_over') and update.callback_query:
+        if update.callback_query and context.user_data.get('start_over'):
             await update.callback_query.answer()
             await update.callback_query.delete_message()
             await update.callback_query.message.reply_text(
@@ -78,7 +81,6 @@ class UserMenu:
                 reply_markup=ReplyKeyboardMarkup(keyboard,
                                                  resize_keyboard=True))
         else:
-
             await update.message.reply_text(
                 message_values['start_menu_message'].format(full_name=telegram_user.get_telegram_full_name()),
                 reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
@@ -168,6 +170,7 @@ class UserMenu:
             else:
                 await update.message.reply_text(message_values['problem_error'])
             return await self.start_menu(update, context)
+
         client_status = '🟢فعال🟢' if client.active else '🔴غیرفعال🔴'
         remaining_time = "{days} روز و {H}:{M}:{S}".format(days=client.get_remaining_time.days,
                                                            H=(
@@ -183,6 +186,7 @@ class UserMenu:
             '%Y/%m/%d %H:%M:%S') if client.expire_time.timestamp() != 0 else 'نامحدود'
         expire_time_solar = jdatetime.datetime.fromgregorian(datetime=client.expire_time).strftime(
             '%Y/%m/%d %H:%M:%S') if client.expire_time.timestamp() != 0 else 'نامحدود'
+
         button = [
             [InlineKeyboardButton(text=client.client_name, callback_data=1),
              InlineKeyboardButton(text='👤نام اشتراک', callback_data=2)],
@@ -224,6 +228,13 @@ class UserMenu:
         return UserConfigInfo.BACK_TO_MENU
 
     async def admin_panel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        print(self.admin_filter.user_ids)
+        admin_telegram_user_id = TelegramUser.objects.filter(user__is_staff=True).values_list('telegram_id', flat=True)
+        await sync_to_async(lambda: print(list(admin_telegram_user_id)))()
+        telegram_user: TelegramUser = update.api_kwargs['user_in_model']
+        if not await telegram_user.aget_user():
+            await update.message.reply_text('حساب شما ادمین نیست!')
+            return await self.start_menu(update, context)
         return UserOrAdminEnum.ADMIN
 
     async def wrong_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

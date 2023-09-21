@@ -3,6 +3,10 @@ from telegram.ext import ContextTypes
 
 
 class AdminMenu:
-    async def start_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text('hi')
+    def admin_handlers(self):
+        handlers_list = list()
+        
+        return handlers_list
+
+    def start_menu(self):
         pass

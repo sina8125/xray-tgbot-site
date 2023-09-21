@@ -8,7 +8,6 @@ class Inbounds:
         inbounds_request = requests.get(url=f'{self.api_url}/list/',
                                         cookies={'session': self.session_cookie},
                                         verify=self.https)
-        print(inbounds_request.json())
         if (inbounds_request.status_code // 100 == 2
                 and inbounds_request.headers.get('Content-Type').startswith('application/json')):
             return inbounds_request.json()

@@ -16,7 +16,8 @@ class TelegramUser(models.Model):
     telegram_id = models.PositiveBigIntegerField(unique=True, null=False, blank=False)
     telegram_username = models.CharField(max_length=32, validators=[MinLengthValidator(5)], null=True, blank=True)
     wallet_balance = models.PositiveIntegerField(null=True, blank=True)
-    is_now_admin = models.BooleanField(default=False, null=True, blank=True)
+    is_now_admin = models.BooleanField(default=False, null=False, blank=True)
+    banned = models.BooleanField(default=False, null=False, blank=True)
     last_message_time = models.DateTimeField(auto_now=True)
     created_time = models.DateTimeField(auto_now_add=True)
     updated_time = models.DateTimeField(auto_now=True)
@@ -39,3 +40,9 @@ class TelegramUser(models.Model):
     def get_telegram_full_name(self):
         full_name = "%s %s" % (self.telegram_first_name or '', self.telegram_last_name or '')
         return full_name.strip()
+
+    async def aget_user(self) -> User:
+        return await sync_to_async(self.get_user)()
+
+    def get_user(self) -> User:
+        return self.user

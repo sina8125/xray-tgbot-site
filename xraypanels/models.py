@@ -9,9 +9,9 @@ from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.utils.datetime_safe import datetime
-from django.conf import settings
 
 from tgbots.models import TelegramUser
+from .xuipanels.xui import panel
 
 
 def default_expire_time():
@@ -71,8 +71,8 @@ class Client(models.Model):
             self.telegram_users_using_config.add(self.telegram_user)
 
     def get_update_client(self):
-        client_request = settings.PANEL.get_client_traffics_by_uuid(uuid=str(self.client_uuid),
-                                                                    inbound_id=self.client_inbound.inbound_id if self.client_inbound else None)
+        client_request = panel.get_client_traffics_by_uuid(uuid=str(self.client_uuid),
+                                                           inbound_id=self.client_inbound.inbound_id if self.client_inbound else None)
         if not client_request:
             raise ValidationError('client not found!')
         client_traffics, client, inbound = client_request
@@ -94,15 +94,15 @@ class Client(models.Model):
         return await sync_to_async(self.get_update_client)()
 
     def set_update_client(self):
-        update_request = settings.PANEL.update_client(email=self.client_name,
-                                                      uuid=str(self.client_uuid),
-                                                      inbound_id=self.client_inbound.inbound_id if self.client_inbound else None,
-                                                      total_gb=self.total_flow,
-                                                      ip_limit=self.ip_limit,
-                                                      enable=self.active,
-                                                      expire_time=int(self.expire_time.astimezone(
-                                                          tz=timezone.get_default_timezone()).timestamp() * 1000)
-                                                      )
+        update_request = panel.update_client(email=self.client_name,
+                                             uuid=str(self.client_uuid),
+                                             inbound_id=self.client_inbound.inbound_id if self.client_inbound else None,
+                                             total_gb=self.total_flow,
+                                             ip_limit=self.ip_limit,
+                                             enable=self.active,
+                                             expire_time=int(self.expire_time.astimezone(
+                                                 tz=timezone.get_default_timezone()).timestamp() * 1000)
+                                             )
         if not update_request:
             raise ValidationError('client update error!')
         self.save()
@@ -110,14 +110,14 @@ class Client(models.Model):
     def add_client(self):
         if not self.client_inbound:
             raise ValidationError('inbound id must be not null for add client!\nplease set inbound id for client')
-        add_request = settings.PANEL.add_client(inbound_id=self.client_inbound.inbound_id,
-                                                email=self.client_name,
-                                                uuid=str(self.client_uuid),
-                                                total_gb=self.total_flow,
-                                                expire_time=int(self.expire_time.astimezone(
-                                                    tz=timezone.get_default_timezone()).timestamp() * 1000),
-                                                ip_limit=self.ip_limit,
-                                                enable=self.active)
+        add_request = panel.add_client(inbound_id=self.client_inbound.inbound_id,
+                                       email=self.client_name,
+                                       uuid=str(self.client_uuid),
+                                       total_gb=self.total_flow,
+                                       expire_time=int(self.expire_time.astimezone(
+                                           tz=timezone.get_default_timezone()).timestamp() * 1000),
+                                       ip_limit=self.ip_limit,
+                                       enable=self.active)
         if not add_request:
             raise ValidationError('add client error!')
         self.save()

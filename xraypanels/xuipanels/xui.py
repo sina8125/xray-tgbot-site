@@ -1,3 +1,5 @@
+from django.conf import settings
+
 from xraypanels.xuipanels.login import Login
 from xraypanels.xuipanels.inbounds import Inbounds
 from xraypanels.xuipanels.clients import Clients
@@ -9,3 +11,7 @@ class XUI(Login, Inbounds, Clients):
         self.https = https
         self.session_cookie = session_cookie
         self.api_url = f'{self.address}/panel/api/inbounds'
+
+
+panel = XUI(settings.PANEL_ADDRESS)
+panel.login(username=settings.PANEL_USERNAME, password=settings.PANEL_PASSWORD)

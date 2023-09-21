@@ -14,8 +14,6 @@ from pathlib import Path
 
 from . import local_settings
 
-from xraypanels import XUI
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -133,10 +131,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 WEBHOOK_DOMAIN = local_settings.WEBHOOK_DOMAIN
 TOKEN = local_settings.TOKEN
-PANEL = XUI(local_settings.PANEL_ADDRESS)
-PANEL.login(username=local_settings.PANEL_USERNAME, password=local_settings.PANEL_PASSWORD)
+PROXY = local_settings.PROXY
+PANEL_ADDRESS = local_settings.PANEL_ADDRESS
+PANEL_USERNAME = local_settings.PANEL_USERNAME
+PANEL_PASSWORD = local_settings.PANEL_PASSWORD
 
 CRONJOBS = [
     # ('*/10 * * * * *', 'tgbots.bots.bot.say_hi', '>> /home/sina/file.log')
 ]
-
