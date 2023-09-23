@@ -6,6 +6,7 @@ import re
 import jdatetime
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler, filters,
                           CallbackQueryHandler)
@@ -13,7 +14,7 @@ from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler, fil
 from xraypanels.models import Client
 from ..enums import UserOrAdminEnum, UserUpdatedConfig, UserConfigInfo
 from tgbots.models import TelegramUser
-from ..values import button_values, message_values
+from ..values.user_values import button_values, message_values
 
 
 class UserMenu:
@@ -30,7 +31,7 @@ class UserMenu:
                         self.create_update_config)
                 ]},
             fallbacks=[MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu),
-                       MessageHandler(filters.ALL, self.wrong_input)],
+                       MessageHandler(~filters.COMMAND, self.wrong_input)],
             map_to_parent={
                 UserOrAdminEnum.USER: UserOrAdminEnum.USER
             }
@@ -70,12 +71,10 @@ class UserMenu:
     async def start_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[button_values['get_updated_config'], button_values['get_config_info']]]
         telegram_user: TelegramUser = update.api_kwargs['user_in_model']
-        user = await sync_to_async(lambda: telegram_user.user)()
-        if user and user.is_staff:
+        if telegram_user.telegram_is_staff:
             keyboard.append([button_values['admin_panel']])
-        if update.callback_query and context.user_data.get('start_over'):
+        if update.callback_query:
             await update.callback_query.answer()
-            await update.callback_query.delete_message()
             await update.callback_query.message.reply_text(
                 message_values['start_menu_message'].format(full_name=telegram_user.get_telegram_full_name()),
                 reply_markup=ReplyKeyboardMarkup(keyboard,
@@ -84,7 +83,6 @@ class UserMenu:
             await update.message.reply_text(
                 message_values['start_menu_message'].format(full_name=telegram_user.get_telegram_full_name()),
                 reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-        context.user_data['start_over'] = False
         return UserOrAdminEnum.USER
 
     async def get_client_with_config_uuid(self, message: str, telegram_user: TelegramUser):
@@ -109,6 +107,7 @@ class UserMenu:
                     client_uuid = match[0]
 
         except Exception as e:
+            print(e, file=open("tgbots/bots/bot.log", 'a+'))
             raise ValidationError('vmess link incorrect!', code=400)
 
         try:
@@ -120,6 +119,7 @@ class UserMenu:
             await client.aget_update_client()
             return client
         except Exception as e:
+            print(e, file=open("tgbots/bots/bot.log", 'a+'))
             raise ValidationError('client create or update error!', code=404)
 
     async def get_update_config(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -140,6 +140,7 @@ class UserMenu:
             elif e.code == 404:
                 await update.message.reply_text(message_values['config_not_found_or_error'])
             else:
+                print(e, file=open("tgbots/bots/bot.log", 'a+'))
                 await update.message.reply_text(message_values['problem_error'])
             return await self.start_menu(update, context)
         config1, config2 = client.connection_links
@@ -168,6 +169,7 @@ class UserMenu:
             elif e.code == 404:
                 await update.message.reply_text(message_values['config_not_found_or_error'])
             else:
+                print(e, file=open("tgbots/bots/bot.log", 'a+'))
                 await update.message.reply_text(message_values['problem_error'])
             return await self.start_menu(update, context)
 
@@ -182,10 +184,15 @@ class UserMenu:
                                                                                      0] != 0 else 'نامحدود'
         total_remaining = f'{client.get_total_remaining[0]} {client.get_total_remaining[1]}' if client.get_total_flow[
                                                                                                     0] != 0 else 'نامحدود'
-        expire_time_ad = client.expire_time.strftime(
-            '%Y/%m/%d %H:%M:%S') if client.expire_time.timestamp() != 0 else 'نامحدود'
-        expire_time_solar = jdatetime.datetime.fromgregorian(datetime=client.expire_time).strftime(
-            '%Y/%m/%d %H:%M:%S') if client.expire_time.timestamp() != 0 else 'نامحدود'
+        if client.expire_time.timestamp() < 0 and client.active:
+            expire_time_ad = expire_time_solar = '30 روز از زمان اتصال'
+        elif client.expire_time.timestamp() == 0:
+            expire_time_ad = expire_time_solar = 'نامحدود'
+        else:
+            expire_time_ad = client.expire_time.strftime(
+                '%Y/%m/%d %H:%M:%S')
+            expire_time_solar = jdatetime.datetime.fromgregorian(datetime=client.expire_time).strftime(
+                '%Y/%m/%d %H:%M:%S')
 
         button = [
             [InlineKeyboardButton(text=client.client_name, callback_data=1),
@@ -224,18 +231,19 @@ class UserMenu:
         await x.delete()
         await update.message.reply_text(message_values['config_info_message'],
                                         reply_markup=InlineKeyboardMarkup(button))
-        context.user_data['start_over'] = True
         return UserConfigInfo.BACK_TO_MENU
 
     async def admin_panel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        print(self.admin_filter.user_ids)
-        admin_telegram_user_id = TelegramUser.objects.filter(user__is_staff=True).values_list('telegram_id', flat=True)
-        await sync_to_async(lambda: print(list(admin_telegram_user_id)))()
         telegram_user: TelegramUser = update.api_kwargs['user_in_model']
-        if not await telegram_user.aget_user():
+        if not telegram_user.telegram_is_staff:
             await update.message.reply_text('حساب شما ادمین نیست!')
             return await self.start_menu(update, context)
-        return UserOrAdminEnum.ADMIN
+        elif telegram_user.is_now_admin:
+            await update.message.reply_text('الان ادمین هستی! یه دور استارت کن به نظرم')
+            return await self.start_menu(update, context)
+        telegram_user.is_now_admin = True
+        await telegram_user.asave(update_fields=['is_now_admin'])
+        return await self.start_menu(update, context)
 
     async def wrong_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(message_values['wrong_input_error'])

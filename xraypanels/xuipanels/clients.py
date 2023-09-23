@@ -123,5 +123,20 @@ class Clients:
                                               verify=self.https)
         if (update_client_request.status_code // 100 == 2
                 and update_client_request.headers.get('Content-Type').startswith('application/json')):
-            return True
+            return client, inbound
         return False
+
+    def reset_client_traffics(self: "xraypanels.xuipanels.XUI", email: str = None, uuid: str = None,
+                              inbound_id: int = None):
+        if not email and not uuid:
+            return False
+        client, inbound = self.get_client(email=email, uuid=uuid, inbound_id=inbound_id or False)
+        reset_client_request = requests.post(
+            url=f'{self.api_url}/{inbound["id"]}/resetClientTraffic/{client["email"]}/',
+            cookies={'session': self.session_cookie},
+            verify=self.https)
+        if (reset_client_request.status_code // 100 == 2
+                and reset_client_request.headers.get('Content-Type').startswith('application/json')):
+            return True
+        else:
+            return False

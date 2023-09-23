@@ -1,6 +1,8 @@
 import base64
 import json
+from datetime import timedelta
 from os.path import normpath, join, splitext
+from uuid import UUID
 
 import django.core.exceptions
 from asgiref.sync import sync_to_async
@@ -62,8 +64,8 @@ class Client(models.Model):
     updated_time = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        if not self.user and not self.telegram_user:
-            raise ValidationError('Both user and telegram_user can not be empty')
+        # if not self.user and not self.telegram_user:
+        #     raise ValidationError('Both user and telegram_user can not be empty')
         # if (self.expire_time and self.expire_time <= timezone.now()) or self.total_usage >= self.total_flow:
         #     self.active = False
         super().save(*args, **kwargs)
@@ -93,19 +95,44 @@ class Client(models.Model):
     async def aget_update_client(self):
         return await sync_to_async(self.get_update_client)()
 
-    def set_update_client(self):
-        update_request = panel.update_client(email=self.client_name,
-                                             uuid=str(self.client_uuid),
-                                             inbound_id=self.client_inbound.inbound_id if self.client_inbound else None,
-                                             total_gb=self.total_flow,
-                                             ip_limit=self.ip_limit,
-                                             enable=self.active,
-                                             expire_time=int(self.expire_time.astimezone(
-                                                 tz=timezone.get_default_timezone()).timestamp() * 1000)
-                                             )
-        if not update_request:
+    def set_update_client(self, client_name: str = None, client_uuid: UUID = None, inbound_id: int = None,
+                          total_flow: int = None, ip_limit: int = None, enable: bool = None,
+                          expire_time: datetime = None, price: int = None):
+        self.__dict__.update({key: value for key, value in locals().items() if value is not None})
+
+        client = panel.update_client(email=self.client_name,
+                                     uuid=str(self.client_uuid),
+                                     inbound_id=self.client_inbound.inbound_id if self.client_inbound else None,
+                                     total_gb=self.total_flow,
+                                     ip_limit=self.ip_limit,
+                                     enable=self.active,
+                                     expire_time=int(self.expire_time.astimezone(
+                                         tz=timezone.get_default_timezone()).timestamp() * 1000)
+                                     )
+        if not client:
             raise ValidationError('client update error!')
+        self.get_update_client()
         self.save()
+
+    async def aset_update_client(self, client_name: str = None, client_uuid: UUID = None, inbound_id: int = None,
+                                 total_flow: int = None, ip_limit: int = None, enable: bool = None,
+                                 expire_time: datetime = None, price: int = None):
+        return await sync_to_async(self.set_update_client)(
+            **{key: value for key, value in locals().items() if key != 'self'})
+
+    def reset_client_traffics(self):
+        reset_request = panel.reset_client_traffics(email=self.client_name,
+                                                    uuid=str(self.client_uuid),
+                                                    inbound_id=self.client_inbound.inbound_id)
+        if not reset_request:
+            raise ValidationError('reset client traffic error!')
+        self.total_usage = 0
+        self.total_upload = 0
+        self.total_download = 0
+        self.save(update_fields=['total_usage', 'total_upload', 'total_download'])
+
+    async def areset_client_traffics(self):
+        return await sync_to_async(self.reset_client_traffics)()
 
     def add_client(self):
         if not self.client_inbound:
@@ -177,4 +204,9 @@ class Client(models.Model):
 
     @property
     def get_remaining_time(self):
-        return self.expire_time - timezone.now()
+        if self.expire_time > timezone.now():
+            return self.expire_time - timezone.now()
+        elif self.expire_time.timestamp() < 0:
+            return self.duration
+        else:
+            return timedelta(days=0)

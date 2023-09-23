@@ -18,3 +18,11 @@ class UserUpdatedConfig(Enum):
 class UserConfigInfo(Enum):
     SEND_CONFIG = 0
     BACK_TO_MENU = 1
+
+
+class AdminNewConfig(Enum):
+    SEND_CLIENT_ARGS = 0
+
+
+class AdminSendMessageToUsers(Enum):
+    SEND_DESIRED_MESSAGE = 0

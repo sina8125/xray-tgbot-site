@@ -13,9 +13,10 @@ class TelegramUser(models.Model):
     inviting_user = models.ForeignKey('self', null=True, blank=True, on_delete=models.DO_NOTHING)
     telegram_first_name = models.CharField(max_length=150, null=True, blank=True)
     telegram_last_name = models.CharField(max_length=150, null=True, blank=True)
-    telegram_id = models.PositiveBigIntegerField(unique=True, null=False, blank=False)
+    telegram_id = models.BigIntegerField(unique=True, null=False, blank=False)
     telegram_username = models.CharField(max_length=32, validators=[MinLengthValidator(5)], null=True, blank=True)
     wallet_balance = models.PositiveIntegerField(null=True, blank=True)
+    telegram_is_staff = models.BooleanField(default=False, null=False, blank=True)
     is_now_admin = models.BooleanField(default=False, null=False, blank=True)
     banned = models.BooleanField(default=False, null=False, blank=True)
     last_message_time = models.DateTimeField(auto_now=True)
@@ -23,11 +24,13 @@ class TelegramUser(models.Model):
     updated_time = models.DateTimeField(auto_now=True)
 
     def clean(self):
-        if self.is_now_admin and (not self.user or not self.user.is_staff):
+        if self.banned and self.telegram_is_staff:
+            raise ValidationError('admin cannot be banned!!!')
+        if self.is_now_admin and not self.telegram_is_staff:
             raise ValidationError('Only staff users can be admin')
 
     def save(self, *args, **kwargs):
-        self.full_clean()
+        self.clean()
         super().save(*args, **kwargs)
 
     async def aupdate_last_message_time(self):
