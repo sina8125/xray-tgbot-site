@@ -27,7 +27,6 @@ class StartBot(APIView):
 
     def post(self, request):
         request_body = json.loads(request.body)
-        print(request_body)
         update = Update.de_json(data=request_body, bot=tgbot.application.bot)
         try:
             telegram_user, created = TelegramUser.objects.update_or_create(telegram_id=update.effective_chat.id,
@@ -36,9 +35,7 @@ class StartBot(APIView):
                                                                                'telegram_last_name': update.effective_chat.last_name,
                                                                                'telegram_username': update.effective_chat.username
                                                                            })
-            print(update.to_dict())
             update.__setstate__({'user_in_model': telegram_user})
-            print(tgbot.admin_filter.user_ids)
             if telegram_user.telegram_is_staff:
                 tgbot.admin_filter.add_user_ids(telegram_user.telegram_id)
             elif telegram_user.telegram_id in tgbot.admin_filter.user_ids:

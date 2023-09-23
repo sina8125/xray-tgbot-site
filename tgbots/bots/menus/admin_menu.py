@@ -87,7 +87,6 @@ class AdminMenu:
                                               price=price)
         await client.aset_update_client()
         await client.areset_client_traffics()
-        print(client.price)
         config1, config2 = client.connection_links
         expire_time_ad = client.expire_time.strftime('%Y/%m/%d')
         expire_time_solar = jdatetime.datetime.fromgregorian(datetime=client.expire_time).strftime('%Y/%m/%d')
