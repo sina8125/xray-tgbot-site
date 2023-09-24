@@ -22,7 +22,7 @@ from ..models import TelegramUser
 class XuiBot(UserMenu, AdminMenu):
     def __init__(self, bot_token: str, webhook_domain: str, proxy_url=None):
         logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                            level=logging.INFO, filename='tgbots/bots/bot.log')
+                            level=logging.DEBUG, filename='tgbots/bots/bot.log')
         logger = logging.getLogger('xui telegram bot')
         # log_handler = handlers.TimedRotatingFileHandler('tgbots/bots/bot.log', when='D', interval=1, backupCount=2)
         # logger.setLevel(logging.DEBUG)
