@@ -21,10 +21,12 @@ from ..models import TelegramUser
 
 class XuiBot(UserMenu, AdminMenu):
     def __init__(self, bot_token: str, webhook_domain: str, proxy_url=None):
+        logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                            level=logging.INFO, filename='tgbots/bots/bot.log')
         logger = logging.getLogger('xui telegram bot')
-        log_handler = handlers.TimedRotatingFileHandler('tgbots/bots/bot.log', when='D', interval=1, backupCount=2)
-        logger.setLevel(logging.INFO)
-        logger.addHandler(log_handler)
+        # log_handler = handlers.TimedRotatingFileHandler('tgbots/bots/bot.log', when='D', interval=1, backupCount=2)
+        # logger.setLevel(logging.DEBUG)
+        # logger.addHandler(log_handler)
 
         if not bot_token or not isinstance(bot_token, str) or not re.match(r'^[0-9]{8,10}:[a-zA-Z0-9_-]{35}$',
                                                                            bot_token):
@@ -55,8 +57,7 @@ class XuiBot(UserMenu, AdminMenu):
                 UserOrAdminEnum.USER: self.user_handlers(),
                 UserOrAdminEnum.ADMIN: self.admin_handlers()
             },
-            fallbacks=[CommandHandler("start", self.start_menu),
-                       MessageHandler(~filters.COMMAND, self.wrong_input)]
+            fallbacks=[CommandHandler("start", self.start_menu)]
         ))
 
     async def start_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
