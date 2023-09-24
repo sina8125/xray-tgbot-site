@@ -12,4 +12,4 @@ class ClientAdmin(ImportExportModelAdmin, ExportActionModelAdmin, admin.ModelAdm
     list_display = (
         'id', 'active', 'user', 'telegram_user', 'client_name', 'client_uuid', 'total_flow', 'total_usage',
         'expire_time',)
-    search_fields = ('telegram_user', 'client_name',)
+    search_fields = ('client_name',)
