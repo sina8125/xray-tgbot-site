@@ -13,6 +13,7 @@ from os.path import normpath, join
 from pathlib import Path
 
 from . import local_settings
+from local_settings import ALLOWED_HOSTS
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,8 +27,6 @@ SECRET_KEY = 'django-insecure-xkk24gj8ys)$80z2mgy*j6m4f=c#&hg4*mxq0u!pplz23wwf%+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 ADMIN_ENABLED = True
-
-ALLOWED_HOSTS = ['.ngrok-free.app', '127.0.0.1', 'localhost']
 
 # Application definition
 
