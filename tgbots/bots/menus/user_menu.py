@@ -7,7 +7,7 @@ import jdatetime
 from django.core.exceptions import ValidationError
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler, filters,
-                          CallbackQueryHandler)
+                          CallbackQueryHandler, CommandHandler)
 
 from tgbots.models import TelegramUser
 from xraypanels.models import Client
@@ -28,12 +28,13 @@ class UserMenu:
                         filters.Regex(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}'),
                         self.create_update_config)
                 ]},
-            fallbacks=[MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu),
-                       MessageHandler(~filters.COMMAND, self.wrong_input)],
+            fallbacks=[
+                CommandHandler("start", self.start_menu),
+                MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu),
+                MessageHandler(~filters.COMMAND, self.wrong_input)],
             map_to_parent={
                 UserOrAdminEnum.USER: UserOrAdminEnum.USER
-            },
-            allow_reentry=True,
+            }
         )
         config_info_handler = ConversationHandler(
             entry_points=[
@@ -44,20 +45,20 @@ class UserMenu:
                     MessageHandler(filters.Regex(r'vmess://[\w+\-=/]+'), self.config_info),
                     MessageHandler(
                         filters.Regex(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}'),
-                        self.config_info),
-                    MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu)
+                        self.config_info)
                 ],
                 UserConfigInfo.BACK_TO_MENU: [
-                    CallbackQueryHandler(self.start_menu, pattern=str(UserConfigInfo.BACK_TO_MENU)),
-                    MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu)
+                    CallbackQueryHandler(self.start_menu, pattern=str(UserConfigInfo.BACK_TO_MENU))
                 ]
             },
-            fallbacks=[MessageHandler(~filters.COMMAND, self.wrong_input)]
+            fallbacks=[
+                CommandHandler("start", self.start_menu),
+                MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu),
+                MessageHandler(~filters.COMMAND, self.wrong_input)]
             ,
             map_to_parent={
                 UserOrAdminEnum.USER: UserOrAdminEnum.USER
-            },
-            allow_reentry=True
+            }
         )
 
         handlers_list.append(update_handler)

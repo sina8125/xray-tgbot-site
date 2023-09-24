@@ -27,12 +27,13 @@ class AdminMenu:
                     MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu)
                 ]
             },
-            fallbacks=[MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu),
-                       MessageHandler(~filters.COMMAND, self.wrong_input)],
+            fallbacks=[
+                CommandHandler("start", self.start_menu),
+                MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu),
+                MessageHandler(~filters.COMMAND, self.wrong_input)],
             map_to_parent={
                 UserOrAdminEnum.ADMIN: UserOrAdminEnum.ADMIN
-            },
-            allow_reentry=True
+            }
 
         )
         send_message_to_users_handler = ConversationHandler(
@@ -47,12 +48,13 @@ class AdminMenu:
                 ]
 
             },
-            fallbacks=[MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu),
-                       MessageHandler(~filters.COMMAND, self.wrong_input)],
+            fallbacks=[
+                CommandHandler("start", self.start_menu),
+                MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu),
+                MessageHandler(~filters.COMMAND, self.wrong_input)],
             map_to_parent={
                 UserOrAdminEnum.ADMIN: UserOrAdminEnum.ADMIN
-            },
-            allow_reentry=True
+            }
         )
         handlers_list.append(create_new_config_handler)
         handlers_list.append(send_message_to_users_handler)
