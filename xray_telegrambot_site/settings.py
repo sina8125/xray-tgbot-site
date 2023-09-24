@@ -13,7 +13,7 @@ from os.path import normpath, join
 from pathlib import Path
 
 from . import local_settings
-from local_settings import ALLOWED_HOSTS
+from .local_settings import ALLOWED_HOSTS
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
