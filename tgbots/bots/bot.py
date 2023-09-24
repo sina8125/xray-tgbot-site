@@ -57,7 +57,9 @@ class XuiBot(UserMenu, AdminMenu):
                 UserOrAdminEnum.USER: self.user_handlers(),
                 UserOrAdminEnum.ADMIN: self.admin_handlers()
             },
-            fallbacks=[CommandHandler("start", self.start_menu)]
+            fallbacks=[CommandHandler("start", self.start_menu),
+                       MessageHandler(~filters.COMMAND, self.wrong_input)],
+            allow_reentry=True
         ))
 
     async def start_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

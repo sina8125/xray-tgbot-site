@@ -4,16 +4,14 @@ import json
 import re
 
 import jdatetime
-from asgiref.sync import sync_to_async
 from django.core.exceptions import ValidationError
-from django.utils import timezone
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler, filters,
                           CallbackQueryHandler)
 
+from tgbots.models import TelegramUser
 from xraypanels.models import Client
 from ..enums import UserOrAdminEnum, UserUpdatedConfig, UserConfigInfo
-from tgbots.models import TelegramUser
 from ..values.user_values import button_values, message_values
 
 
@@ -34,7 +32,8 @@ class UserMenu:
                        MessageHandler(~filters.COMMAND, self.wrong_input)],
             map_to_parent={
                 UserOrAdminEnum.USER: UserOrAdminEnum.USER
-            }
+            },
+            allow_reentry=True,
         )
         config_info_handler = ConversationHandler(
             entry_points=[
@@ -57,7 +56,8 @@ class UserMenu:
             ,
             map_to_parent={
                 UserOrAdminEnum.USER: UserOrAdminEnum.USER
-            }
+            },
+            allow_reentry=True
         )
 
         handlers_list.append(update_handler)
@@ -83,6 +83,7 @@ class UserMenu:
             await update.message.reply_text(
                 message_values['start_menu_message'].format(full_name=telegram_user.get_telegram_full_name()),
                 reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+        print('raft')
         return UserOrAdminEnum.USER
 
     async def get_client_with_config_uuid(self, message: str, telegram_user: TelegramUser):
