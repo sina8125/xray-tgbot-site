@@ -39,7 +39,7 @@ class Inbound(models.Model):
         verbose_name_plural = 'Inbounds'
 
     def __str__(self):
-        return self.inbound_id
+        return str(self.inbound_id)
 
 
 class Client(models.Model):
