@@ -23,6 +23,14 @@ class TelegramUser(models.Model):
     created_time = models.DateTimeField(auto_now_add=True)
     updated_time = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        db_table = 'telegram_users'
+        verbose_name = 'Telegram User'
+        verbose_name_plural = 'Telegram Users'
+
+    def __str__(self):
+        return self.get_telegram_full_name()
+
     def clean(self):
         if self.banned and self.telegram_is_staff:
             raise ValidationError('admin cannot be banned!!!')

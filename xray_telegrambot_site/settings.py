@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     # 'background_task',
     'rest_framework',
     'django_crontab',
+    'import_export',
 
     'tgbots',
     'xraypanels'
@@ -120,7 +121,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = normpath(join(BASE_DIR, 'static'))
 
 MEDIA_ROOT = normpath(join(BASE_DIR, 'media'))
 MEDIA_URL = '/media/'

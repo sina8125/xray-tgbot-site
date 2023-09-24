@@ -33,6 +33,14 @@ class Inbound(models.Model):
     inbound_id = models.PositiveIntegerField(blank=False, null=False, unique=True)
     port = models.PositiveIntegerField(blank=False, null=False, unique=True)
 
+    class Meta:
+        db_table = 'inbounds'
+        verbose_name = 'Inbound'
+        verbose_name_plural = 'Inbounds'
+
+    def __str__(self):
+        return self.inbound_id
+
 
 class Client(models.Model):
     def set_payment_receipt_image_path(self, filename):
@@ -41,11 +49,12 @@ class Client(models.Model):
             join(self.client_name,
                  f'{self.telegram_user.telegram_id or self.user.username or ""}_{self.purchase_date:%Y%m%d-%H%M%S}_{self.client_uuid}{extension}'))
 
-    user = models.ForeignKey(User, related_name='user', on_delete=models.DO_NOTHING, null=True, blank=True)
-    telegram_user = models.ForeignKey(TelegramUser, related_name='telegram_user', on_delete=models.DO_NOTHING,
+    user = models.ForeignKey(User, related_name='user', on_delete=models.SET_NULL, null=True, blank=True)
+    telegram_user = models.ForeignKey(TelegramUser, related_name='telegram_user', on_delete=models.SET_NULL,
                                       null=True, blank=True)
-    telegram_users_using_config = models.ManyToManyField(TelegramUser, 'user_using', blank=True)
-    client_inbound = models.ForeignKey(Inbound, related_name='inbound', on_delete=models.DO_NOTHING, null=True,
+    telegram_users_using_config = models.ManyToManyField(TelegramUser, 'user_using', db_table='users_using_clients',
+                                                         blank=True)
+    client_inbound = models.ForeignKey(Inbound, related_name='inbound', on_delete=models.SET_NULL, null=True,
                                        blank=True)
     client_name = models.CharField(max_length=150, null=True, blank=False)
     client_uuid = models.UUIDField(unique=True, null=False, blank=False)
@@ -62,6 +71,14 @@ class Client(models.Model):
     purchase_date = models.DateTimeField(default=timezone.now, null=False, blank=False)
     created_time = models.DateTimeField(auto_now_add=True)
     updated_time = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'clients'
+        verbose_name = 'Client'
+        verbose_name_plural = 'Clients'
+
+    def __str__(self):
+        return self.client_name
 
     def save(self, *args, **kwargs):
         # if not self.user and not self.telegram_user:
