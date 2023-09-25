@@ -7,15 +7,15 @@ import xraypanels.xuipanels
 
 class Clients:
     def get_client(self: "xraypanels.xuipanels.XUI",
-                   email: str = False,
-                   uuid: str = False,
-                   inbound_id: int = False):
+                   email: str = None,
+                   uuid: str = None,
+                   inbound_id: int = None):
         if not email and not uuid:
-            return False, None
+            return None, None, None
 
         inbounds = self.get_inbounds()
         if not inbounds:
-            return False, None
+            return None, None, None
 
         for inbound in inbounds['obj']:
             if inbound_id and inbound_id != inbound['id']:
@@ -23,29 +23,16 @@ class Clients:
             settings = json.loads(inbound["settings"])
             for client in settings['clients']:
                 if client['email'] == email or client['id'] == uuid:
-                    return client, inbound
-        return False, None
+                    for client_traffics in inbound['clientStats']:
+                        if client_traffics['email'] == client['email']:
+                            return client_traffics, client, inbound
+        return None, None, None
 
-    def get_client_traffics_by_email(self: "xraypanels.xuipanels.XUI", email: str):
-        if not email:
-            return False
-        client_traffics_request = requests.get(url=f'{self.api_url}/getClientTraffics/{email}/',
-                                               cookies={'session': self.session_cookie},
-                                               verify=self.https)
-        if (client_traffics_request.status_code // 100 == 2
-                and client_traffics_request.headers.get('Content-Type').startswith('application/json')):
-            return client_traffics_request.json()['obj']
-        else:
-            return False
+    def get_client_traffics_by_email(self: "xraypanels.xuipanels.XUI", email: str, inbound_id: int = None):
+        return self.get_client(email=email, inbound_id=inbound_id)
 
     def get_client_traffics_by_uuid(self: "xraypanels.xuipanels.XUI", uuid: str, inbound_id: int = None):
-        if not uuid:
-            return False
-        client, inbound = self.get_client(uuid=uuid, inbound_id=inbound_id)
-        for client_traffics in inbound['clientStats']:
-            if client_traffics['email'] == client['email']:
-                return client_traffics, client, inbound
-        return False
+        return self.get_client(uuid=uuid, inbound_id=inbound_id)
 
     def add_client(self: "xraypanels.xuipanels.XUI",
                    inbound_id: int,

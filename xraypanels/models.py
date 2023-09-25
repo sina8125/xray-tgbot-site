@@ -4,7 +4,6 @@ from datetime import timedelta
 from os.path import normpath, join, splitext
 from uuid import UUID
 
-import django.core.exceptions
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -78,7 +77,69 @@ class Client(models.Model):
         verbose_name_plural = 'Clients'
 
     def __str__(self):
-        return self.client_name
+        return self.client_name or str(self.client_uuid)
+
+    @property
+    def connection_links(self):
+        def create_link(address, host, operator):
+            vmess_config = {
+                "add": f"{address}.sinarahimi.tk",
+                "aid": "0",
+                "alpn": "",
+                "fp": "",
+                "host": f"{host}",
+                "id": f"{str(self.client_uuid)}",
+                "net": "tcp",
+                "path": "/",
+                "port": f"{self.client_inbound.port}",
+                "ps": f"{self.client_name} {operator}",
+                "scy": "auto",
+                "sni": "",
+                "tls": "",
+                "type": "http",
+                "v": "2"
+            }
+            vmess_base64 = base64.urlsafe_b64encode(json.dumps(vmess_config).encode()).decode()
+            vmess_link = f"vmess://{vmess_base64}"
+            return vmess_link
+
+        header1 = "telewebion.com"
+        header2 = "zula.ir"
+        config1 = create_link("mci", header1, "(Hamrah Aval)")
+        config2 = create_link("mtn", header2, "(Irancell)")
+        return config1, config2
+
+    @property
+    def get_total_flow(self):
+        return convert_bytes(self.total_flow)
+
+    @property
+    def get_total_download(self):
+        return convert_bytes(self.total_download)
+
+    @property
+    def get_total_upload(self):
+        return convert_bytes(self.total_upload)
+
+    @property
+    def get_total_usage(self):
+        return convert_bytes(self.total_usage)
+
+    @property
+    def get_total_remaining(self):
+        if self.total_flow >= self.total_usage:
+            return convert_bytes(self.total_flow - self.total_usage)
+        else:
+            return 0, 'بایت'
+
+    @property
+    def get_remaining_time(self):
+        if self.expire_time > timezone.now():
+            return self.expire_time - timezone.now()
+        elif self.expire_time.timestamp() < 0:
+            return self.duration
+        else:
+            return timedelta(days=0)
 
     def save(self, *args, **kwargs):
         # if not self.user and not self.telegram_user:
@@ -88,6 +149,35 @@ class Client(models.Model):
         super().save(*args, **kwargs)
         if self.telegram_user and not self.telegram_users_using_config.filter(id=self.telegram_user.id).exists():
             self.telegram_users_using_config.add(self.telegram_user)
+
+    @classmethod
+    def get_client_with_client_name(cls, client_name):
+        client_traffics, client, inbound = panel.get_client_traffics_by_email(email=client_name)
+        if not client:
+            raise ValidationError('client not found!')
+        client_inbound, created = Inbound.objects.get_or_create(inbound_id=inbound['id'],
+                                                                defaults={'port': inbound['port']})
+        client_model, created = cls.objects.update_or_create(client_uuid=client['id'],
+                                                             defaults={
+                                                                 'client_inbound': client_inbound,
+                                                                 'client_name': client_traffics['email'],
+                                                                 'active': client_traffics['enable'] and client[
+                                                                     'enable'],
+                                                                 'total_upload': client_traffics['up'],
+                                                                 'total_download': client_traffics['down'],
+                                                                 'total_flow': client_traffics['total'],
+                                                                 'expire_time': datetime.fromtimestamp(
+                                                                     client_traffics['expiryTime'] / 1000,
+                                                                     tz=timezone.get_default_timezone()),
+                                                                 'total_usage': client_traffics['up'] + client_traffics[
+                                                                     'down'],
+                                                                 'ip_limit': client['limitIp']
+                                                             })
+        return client_model
+
+    @classmethod
+    async def aget_client_with_client_name(cls, client_name):
+        return await sync_to_async(cls.get_client_with_client_name)(client_name)
 
     def get_update_client(self):
         client_request = panel.get_client_traffics_by_uuid(uuid=str(self.client_uuid),
@@ -165,65 +255,3 @@ class Client(models.Model):
         if not add_request:
             raise ValidationError('add client error!')
         self.save()
-
-    @property
-    def connection_links(self):
-        def create_link(address, host, operator):
-            vmess_config = {
-                "add": f"{address}.sinarahimi.tk",
-                "aid": "0",
-                "alpn": "",
-                "fp": "",
-                "host": f"{host}",
-                "id": f"{str(self.client_uuid)}",
-                "net": "tcp",
-                "path": "/",
-                "port": f"{self.client_inbound.port}",
-                "ps": f"{self.client_name} {operator}",
-                "scy": "auto",
-                "sni": "",
-                "tls": "",
-                "type": "http",
-                "v": "2"
-            }
-            vmess_base64 = base64.urlsafe_b64encode(json.dumps(vmess_config).encode()).decode()
-            vmess_link = f"vmess://{vmess_base64}"
-            return vmess_link
-
-        header1 = "telewebion.com"
-        header2 = "zula.ir"
-        config1 = create_link("mci", header1, "(Hamrah Aval)")
-        config2 = create_link("mtn", header2, "(Irancell)")
-        return config1, config2
-
-    @property
-    def get_total_flow(self):
-        return convert_bytes(self.total_flow)
-
-    @property
-    def get_total_download(self):
-        return convert_bytes(self.total_download)
-
-    @property
-    def get_total_upload(self):
-        return convert_bytes(self.total_upload)
-
-    @property
-    def get_total_usage(self):
-        return convert_bytes(self.total_usage)
-
-    @property
-    def get_total_remaining(self):
-        if self.total_flow >= self.total_usage:
-            return convert_bytes(self.total_flow - self.total_usage)
-        else:
-            return 0, 'بایت'
-
-    @property
-    def get_remaining_time(self):
-        if self.expire_time > timezone.now():
-            return self.expire_time - timezone.now()
-        elif self.expire_time.timestamp() < 0:
-            return self.duration
-        else:
-            return timedelta(days=0)

@@ -29,7 +29,7 @@ class TelegramUser(models.Model):
         verbose_name_plural = 'Telegram Users'
 
     def __str__(self):
-        return self.get_telegram_full_name()
+        return self.get_telegram_full_name() or str(self.telegram_id)
 
     def clean(self):
         if self.banned and self.telegram_is_staff:
