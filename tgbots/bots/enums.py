@@ -4,11 +4,12 @@ from enum import Enum
 class UserOrAdminEnum(Enum):
     USER = 0
     ADMIN = 1
+    BACK_TO_MAIN_MENU = 2
 
 
-class UserMenuEnum(Enum):
-    FIRST_MENU = 0
-    SECOND_MENU = 1
+# class UserMenuEnum(Enum):
+#     FIRST_MENU = 0
+#     SECOND_MENU = 1
 
 
 class UserUpdatedConfig(Enum):
@@ -17,7 +18,6 @@ class UserUpdatedConfig(Enum):
 
 class UserConfigInfo(Enum):
     SEND_CONFIG = 0
-    BACK_TO_MENU = 1
 
 
 class AdminNewConfig(Enum):

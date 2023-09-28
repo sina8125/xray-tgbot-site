@@ -15,7 +15,7 @@ from django.conf import settings
 
 from .menus import AdminMenu, UserMenu
 from .enums import UserOrAdminEnum
-from .values.user_values import message_values
+from .values.user_values import message_values, button_values
 from ..models import TelegramUser
 
 
@@ -42,6 +42,11 @@ class XuiBot(UserMenu, AdminMenu):
 
         self.admin_filter = filters.User()
         self.banned_user_filter = filters.User()
+        self.fallback_handlers = [
+            CommandHandler("start", self.start_menu),
+            CallbackQueryHandler(self.start_menu, pattern=f'^{UserOrAdminEnum.BACK_TO_MAIN_MENU}$'),
+            MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu),
+            MessageHandler(~filters.COMMAND, self.wrong_input)]
 
         async def set_webhook_url():
             async with self.application as application:
@@ -50,15 +55,17 @@ class XuiBot(UserMenu, AdminMenu):
         asyncio.run(set_webhook_url())
         self.application.add_handler(MessageHandler(self.banned_user_filter, self.banned))
         self.application.add_handler(ConversationHandler(
-            entry_points=[CommandHandler("start", self.start_menu),
-                          MessageHandler(~filters.COMMAND, self.first_start),
-                          CallbackQueryHandler(callback=self.first_start)],
+            entry_points=[
+                CommandHandler("start", self.start_menu),
+                MessageHandler(~filters.COMMAND, self.first_start),
+                CallbackQueryHandler(callback=self.first_start)],
             states={
-                UserOrAdminEnum.USER: self.user_handlers(),
-                UserOrAdminEnum.ADMIN: self.admin_handlers()
+                UserOrAdminEnum.USER: [CallbackQueryHandler(self.start_menu,
+                                                            'back_to_main_menu')] + self.user_handlers(),
+                UserOrAdminEnum.ADMIN: [CallbackQueryHandler(self.start_menu,
+                                                             'back_to_main_menu')] + self.admin_handlers()
             },
-            fallbacks=[CommandHandler("start", self.start_menu),
-                       MessageHandler(~filters.COMMAND, self.wrong_input)]
+            fallbacks=self.fallback_handlers
         ))
 
     async def start_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -93,6 +100,19 @@ class XuiBot(UserMenu, AdminMenu):
                 await update.message.forward(telegram_admin.telegram_id)
 
         return await self.start_menu(update, context)
+
+    def remove_button(self, button_data, keyboard):
+        updated_keyboard = []
+
+        for row in keyboard:
+            updated_row = []
+            for button in row:
+                if button.callback_data != button_data:
+                    updated_row.append(button)
+            if updated_row:
+                updated_keyboard.append(updated_row)
+
+        return updated_keyboard
 
 
 tgbot = XuiBot(settings.TOKEN, settings.WEBHOOK_DOMAIN, settings.PROXY)

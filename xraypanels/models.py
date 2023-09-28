@@ -30,7 +30,11 @@ def convert_bytes(num):
 
 class Inbound(models.Model):
     inbound_id = models.PositiveIntegerField(blank=False, null=False, unique=True)
+    inbound_name = models.CharField(max_length=150, null=True, blank=False)
+    active = models.BooleanField(default=True, null=True, blank=True)
     port = models.PositiveIntegerField(blank=False, null=False, unique=True)
+    created_time = models.DateTimeField(auto_now_add=True)
+    updated_time = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'inbounds'
@@ -55,7 +59,7 @@ class Client(models.Model):
                                                          blank=True)
     client_inbound = models.ForeignKey(Inbound, related_name='inbound', on_delete=models.SET_NULL, null=True,
                                        blank=True)
-    client_name = models.CharField(max_length=150, null=True, blank=False)
+    client_name = models.CharField(max_length=150, null=True, blank=True)
     client_uuid = models.UUIDField(unique=True, null=False, blank=False)
     active = models.BooleanField(default=True, blank=True, null=False)
     ip_limit = models.PositiveIntegerField(default=1, blank=True, null=False)
@@ -81,6 +85,9 @@ class Client(models.Model):
 
     @property
     def connection_links(self):
+        if not self.client_inbound or not self.client_name:
+            return None, None
+
         def create_link(address, host, operator):
             vmess_config = {
                 "add": f"{address}.sinarahimi.tk",
@@ -147,22 +154,26 @@ class Client(models.Model):
         # if (self.expire_time and self.expire_time <= timezone.now()) or self.total_usage >= self.total_flow:
         #     self.active = False
         super().save(*args, **kwargs)
-        if self.telegram_user and not self.telegram_users_using_config.filter(id=self.telegram_user.id).exists():
+        if self.telegram_user:
             self.telegram_users_using_config.add(self.telegram_user)
 
     @classmethod
-    def get_client_with_client_name(cls, client_name):
+    def get_client_with_client_name(cls, client_name, telegram_user: TelegramUser = None):
         client_traffics, client, inbound = panel.get_client_traffics_by_email(email=client_name)
         if not client:
             raise ValidationError('client not found!')
-        client_inbound, created = Inbound.objects.get_or_create(inbound_id=inbound['id'],
-                                                                defaults={'port': inbound['port']})
+        client_inbound, created = Inbound.objects.update_or_create(inbound_id=inbound['id'],
+                                                                   defaults={
+                                                                       'inbound_name': inbound['remark'],
+                                                                       'active': inbound['enable'],
+                                                                       'port': inbound['port']
+                                                                   })
         client_model, created = cls.objects.update_or_create(client_uuid=client['id'],
                                                              defaults={
                                                                  'client_inbound': client_inbound,
                                                                  'client_name': client_traffics['email'],
                                                                  'active': client_traffics['enable'] and client[
-                                                                     'enable'],
+                                                                     'enable'] and inbound['enable'],
                                                                  'total_upload': client_traffics['up'],
                                                                  'total_download': client_traffics['down'],
                                                                  'total_flow': client_traffics['total'],
@@ -173,22 +184,73 @@ class Client(models.Model):
                                                                      'down'],
                                                                  'ip_limit': client['limitIp']
                                                              })
-        return client_model
+        if telegram_user and (created or not client_model.telegram_user):
+            client_model.telegram_user = telegram_user
+            client_model.save(update_fields=['telegram_user'])
+
+        return client_model, created
 
     @classmethod
-    async def aget_client_with_client_name(cls, client_name):
-        return await sync_to_async(cls.get_client_with_client_name)(client_name)
+    async def aget_client_with_client_name(cls, client_name, telegram_user: TelegramUser = None):
+        return await sync_to_async(cls.get_client_with_client_name)(
+            client_name=client_name,
+            telegram_user=telegram_user
+        )
 
-    def get_update_client(self):
-        client_request = panel.get_client_traffics_by_uuid(uuid=str(self.client_uuid),
-                                                           inbound_id=self.client_inbound.inbound_id if self.client_inbound else None)
-        if not client_request:
+    @classmethod
+    def get_client_with_uuid(cls, client_uuid, telegram_user: TelegramUser = None):
+        client_traffics, client, inbound = panel.get_client_traffics_by_uuid(uuid=client_uuid)
+        if not client:
             raise ValidationError('client not found!')
-        client_traffics, client, inbound = client_request
-        if not self.client_inbound or self.client_inbound.inbound_id != inbound['id']:
-            self.client_inbound, created = Inbound.objects.get_or_create(inbound_id=inbound['id'],
-                                                                         defaults={'port': inbound['port']})
-        self.active = client_traffics['enable'] and client['enable']
+        client_inbound, created = Inbound.objects.update_or_create(inbound_id=inbound['id'],
+                                                                   defaults={
+                                                                       'inbound_name': inbound['remark'],
+                                                                       'active': inbound['enable'],
+                                                                       'port': inbound['port']
+                                                                   })
+        client_model, created = cls.objects.update_or_create(client_uuid=client['id'],
+                                                             defaults={
+                                                                 'client_inbound': client_inbound,
+                                                                 'client_name': client_traffics['email'],
+                                                                 'active': client_traffics['enable'] and client[
+                                                                     'enable'] and inbound['enable'],
+                                                                 'total_upload': client_traffics['up'],
+                                                                 'total_download': client_traffics['down'],
+                                                                 'total_flow': client_traffics['total'],
+                                                                 'expire_time': datetime.fromtimestamp(
+                                                                     client_traffics['expiryTime'] / 1000,
+                                                                     tz=timezone.get_default_timezone()),
+                                                                 'total_usage': client_traffics['up'] + client_traffics[
+                                                                     'down'],
+                                                                 'ip_limit': client['limitIp']
+                                                             })
+        if telegram_user and (created or not client_model.telegram_user):
+            client_model.telegram_user = telegram_user
+            client_model.save(update_fields=['telegram_user'])
+
+        return client_model, created
+
+    @classmethod
+    async def aget_client_with_uuid(cls, client_uuid, telegram_user: TelegramUser = None):
+        return await sync_to_async(cls.get_client_with_uuid)(
+            client_uuid=client_uuid,
+            telegram_user=telegram_user
+        )
+
+    def get_update_client(self, client_traffics=None, client=None, inbound=None):
+        if not client_traffics or not client or not inbound:
+            client_traffics, client, inbound = panel.get_client_traffics_by_uuid(uuid=str(self.client_uuid),
+                                                                                 inbound_id=self.client_inbound.inbound_id if self.client_inbound else None)
+        if not client:
+            raise ValidationError('client not found!')
+
+        self.client_inbound, created = Inbound.objects.update_or_create(inbound_id=inbound['id'],
+                                                                        defaults={
+                                                                            'inbound_name': inbound['remark'],
+                                                                            'active': inbound['enable'],
+                                                                            'port': inbound['port']
+                                                                        })
+        self.active = client_traffics['enable'] and client['enable'] and inbound['enable']
         self.client_name = client_traffics['email']
         self.total_upload = client_traffics['up']
         self.total_download = client_traffics['down']
@@ -199,38 +261,42 @@ class Client(models.Model):
         self.ip_limit = client['limitIp']
         self.save()
 
-    async def aget_update_client(self):
-        return await sync_to_async(self.get_update_client)()
+    async def aget_update_client(self, client_traffics=None, client=None, inbound=None):
+        return await sync_to_async(self.get_update_client)(
+            client_traffics=client_traffics,
+            client=client,
+            inbound=inbound
+        )
 
     def set_update_client(self, client_name: str = None, client_uuid: UUID = None, inbound_id: int = None,
                           total_flow: int = None, ip_limit: int = None, enable: bool = None,
                           expire_time: datetime = None, price: int = None):
         self.__dict__.update({key: value for key, value in locals().items() if value is not None})
 
-        client = panel.update_client(email=self.client_name,
-                                     uuid=str(self.client_uuid),
-                                     inbound_id=self.client_inbound.inbound_id if self.client_inbound else None,
-                                     total_gb=self.total_flow,
-                                     ip_limit=self.ip_limit,
-                                     enable=self.active,
-                                     expire_time=int(self.expire_time.astimezone(
-                                         tz=timezone.get_default_timezone()).timestamp() * 1000)
-                                     )
+        client_traffics, client, inbound = panel.update_client(email=self.client_name,
+                                                               uuid=str(self.client_uuid),
+                                                               inbound_id=self.client_inbound.inbound_id if self.client_inbound else None,
+                                                               total_gb=self.total_flow,
+                                                               ip_limit=self.ip_limit,
+                                                               enable=self.active,
+                                                               expire_time=int(self.expire_time.astimezone(
+                                                                   tz=timezone.get_default_timezone()).timestamp() * 1000)
+                                                               )
         if not client:
             raise ValidationError('client update error!')
         self.get_update_client()
-        self.save()
+        # self.save()
 
     async def aset_update_client(self, client_name: str = None, client_uuid: UUID = None, inbound_id: int = None,
                                  total_flow: int = None, ip_limit: int = None, enable: bool = None,
                                  expire_time: datetime = None, price: int = None):
         return await sync_to_async(self.set_update_client)(
-            **{key: value for key, value in locals().items() if key != 'self'})
+            **{key: value for key, value in locals().items() if (key != 'self' and value is not None)})
 
     def reset_client_traffics(self):
         reset_request = panel.reset_client_traffics(email=self.client_name,
                                                     uuid=str(self.client_uuid),
-                                                    inbound_id=self.client_inbound.inbound_id)
+                                                    inbound_id=self.client_inbound.inbound_id if self.client_inbound else None)
         if not reset_request:
             raise ValidationError('reset client traffic error!')
         self.total_usage = 0
@@ -244,6 +310,8 @@ class Client(models.Model):
     def add_client(self):
         if not self.client_inbound:
             raise ValidationError('inbound id must be not null for add client!\nplease set inbound id for client')
+        if not self.client_name:
+            raise ValidationError('client must have a client name!')
         add_request = panel.add_client(inbound_id=self.client_inbound.inbound_id,
                                        email=self.client_name,
                                        uuid=str(self.client_uuid),
@@ -254,4 +322,4 @@ class Client(models.Model):
                                        enable=self.active)
         if not add_request:
             raise ValidationError('add client error!')
-        self.save()
+        self.get_update_client()
