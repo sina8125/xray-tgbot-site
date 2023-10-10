@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'django_crontab',
     'import_export',
+    'django_PTB_persistence',
 
     'tgbots',
     'xraypanels'

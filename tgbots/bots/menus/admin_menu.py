@@ -1,16 +1,17 @@
 import re
 import uuid
-
 import jdatetime
+
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler, filters, CommandHandler)
 
 from tgbots.bots.values.admin_values import button_values, message_values
 from xraypanels.models import Client
-from ..enums import UserOrAdminEnum, AdminNewConfig, AdminSendMessageToUsers
+from ..enums import UserOrAdminEnum, AdminEnum
 from ...models import TelegramUser
 
 
@@ -19,35 +20,41 @@ class AdminMenu:
         handlers_list = list()
         create_new_config_handler = ConversationHandler(
             entry_points=[
-                MessageHandler(filters.Regex(f"^{button_values['create_new_config']}$") & (self.admin_filter or None),
+                MessageHandler(filters.Regex(f"^{button_values['create_new_config']}$"),
                                self.get_client_args)],
             states={
-                AdminNewConfig.SEND_CLIENT_ARGS: [
+                AdminEnum.SEND_CLIENT_ARGS.value: [
                     CommandHandler("new", self.create_new_config, filters=self.admin_filter or None)
                 ]
             },
             fallbacks=self.fallback_handlers,
             map_to_parent={
-                UserOrAdminEnum.ADMIN: UserOrAdminEnum.ADMIN
-            }
-
+                UserOrAdminEnum.ADMIN.value: UserOrAdminEnum.ADMIN.value
+            },
+            name='admin_new_config_handler',
+            persistent=True
         )
+
         send_message_to_users_handler = ConversationHandler(
             entry_points=[
-                MessageHandler(filters.Regex(f"^{button_values['send_message_to_users']}$"),
-                               self.get_message_for_send_to_users)
+                MessageHandler(
+                    filters.Regex(f"^{button_values['send_message_to_users']}$") & (self.admin_filter or None),
+                    self.get_message_for_send_to_users)
             ],
             states={
-                AdminSendMessageToUsers.SEND_DESIRED_MESSAGE: [
-                    MessageHandler(~filters.COMMAND & ~filters.Regex(f"^{button_values['back_to_main_menu']}$"),
+                AdminEnum.SEND_DESIRED_MESSAGE.value: [
+                    MessageHandler(~filters.COMMAND & ~filters.Regex(f"^{button_values['back_to_main_menu']}$") & (
+                            self.admin_filter or None),
                                    self.send_message_to_users)
                 ]
 
             },
             fallbacks=self.fallback_handlers,
             map_to_parent={
-                UserOrAdminEnum.ADMIN: UserOrAdminEnum.ADMIN
-            }
+                UserOrAdminEnum.ADMIN.value: UserOrAdminEnum.ADMIN.value
+            },
+            name='admin_send_message_handler',
+            persistent=True
         )
         handlers_list.append(create_new_config_handler)
         handlers_list.append(send_message_to_users_handler)
@@ -62,44 +69,47 @@ class AdminMenu:
             [button_values['send_message_to_users']],
             [button_values['user_panel']]
         ]
+
         if update.callback_query:
             await update.callback_query.answer()
-            if update.callback_query.data == str(UserOrAdminEnum.BACK_TO_MAIN_MENU):
+            if update.callback_query.data == str(UserOrAdminEnum.BACK_TO_MAIN_MENU.value):
                 inline_keyboard = InlineKeyboardMarkup(self.remove_button(update.callback_query.data,
                                                                           update.callback_query.message.reply_markup.inline_keyboard))
                 await update.callback_query.edit_message_reply_markup(inline_keyboard)
 
         await update.effective_chat.send_message(message_values['start_menu_message'],
                                                  reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-        return UserOrAdminEnum.ADMIN
+        return UserOrAdminEnum.ADMIN.value
 
     async def get_client_args(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[button_values['back_to_main_menu']]]
         await update.message.reply_text(message_values['send_new_client_args'],
                                         reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-        return AdminNewConfig.SEND_CLIENT_ARGS
+        return AdminEnum.SEND_CLIENT_ARGS.value
 
     async def create_new_config(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         match = re.match(r'^\d{4}', context.args[0]) if len(context.args) >= 2 else None
         if len(context.args) < 2 or not match:
             await update.message.reply_text('آرگومان ها غیر مجاز')
-            return await self.start_menu(update, context)
+            return await self.get_client_args(update, context)
+
         price = {10: 40, 20: 70, 30: 90, 50: 115, 100: 200, 150: 270, 200: 320}
         number = match.group(0)
         client_name = number + '_Tel:@Sina8125'
         total_flow = int(context.args[1])
         ip_limit = int(context.args[2]) if len(context.args) > 2 else 1
         price = context.args[3] if len(context.args) > 3 else str(price[total_flow] + ((ip_limit - 1) * 25))
+
         try:
             # update previous client
             previous_client, created = await Client.aget_client_with_client_name(client_name=client_name)
             previous_client.active = False
-            print(previous_client.active)
             if previous_client.expire_time > timezone.now():
                 previous_client.expire_time = timezone.now()
             await previous_client.asave(update_fields=['active', 'expire_time'])
         except Exception as e:
             pass
+
         client = await Client.objects.acreate(client_uuid=uuid.uuid4(), client_name=client_name,
                                               total_flow=total_flow * 1024 * 1024 * 1024, ip_limit=ip_limit,
                                               price=price)
@@ -108,7 +118,8 @@ class AdminMenu:
         config1, config2 = client.connection_links
         if not config1:
             await update.message.reply_text(message_values['config_not_found_or_error'])
-            return await self.start_menu(update, context)
+            return await self.get_client_args(update, context)
+
         expire_time_ad = client.expire_time.strftime('%Y/%m/%d')
         expire_time_solar = jdatetime.datetime.fromgregorian(datetime=client.expire_time).strftime('%Y/%m/%d')
         await update.message.reply_text(
@@ -121,13 +132,13 @@ class AdminMenu:
                                                         total_flow=f'{int(client.get_total_flow[0])} {client.get_total_flow[1]}',
                                                         price=client.price
                                                         ), parse_mode="Markdown")
-        return await self.start_menu(update, context)
+        return await self.get_client_args(update, context)
 
     async def get_message_for_send_to_users(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[button_values['back_to_main_menu']]]
         await update.message.reply_text(message_values['send_message_for_send_to_users'],
                                         reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-        return AdminSendMessageToUsers.SEND_DESIRED_MESSAGE
+        return AdminEnum.SEND_DESIRED_MESSAGE.value
 
     async def send_message_to_users(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         telegram_users = await sync_to_async(list)(TelegramUser.objects.all())
@@ -135,7 +146,7 @@ class AdminMenu:
             try:
                 await update.message.copy(chat_id=telegram_user.telegram_id, reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton(button_values['back_to_main_menu'],
-                                           callback_data=str(UserOrAdminEnum.BACK_TO_MAIN_MENU))]]))
+                                           callback_data=str(UserOrAdminEnum.BACK_TO_MAIN_MENU.value))]]))
             except Exception as e:
                 print(e, file=open("tgbots/bots/bot.log", 'a+'))
                 await update.message.reply_text(

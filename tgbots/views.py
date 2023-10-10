@@ -26,9 +26,10 @@ class GetConfigView(TemplateView):
 class StartBot(APIView):
 
     def post(self, request):
-        request_body = json.loads(request.body)
-        update = Update.de_json(data=request_body, bot=tgbot.application.bot)
         try:
+            tgbot.start_bot()
+            request_body = json.loads(request.body)
+            update = Update.de_json(data=request_body, bot=tgbot.application.bot)
             telegram_user, created = TelegramUser.objects.update_or_create(telegram_id=update.effective_chat.id,
                                                                            defaults={
                                                                                'telegram_first_name': update.effective_chat.first_name,
@@ -36,6 +37,7 @@ class StartBot(APIView):
                                                                                'telegram_username': update.effective_chat.username
                                                                            })
             update.__setstate__({'user_in_model': telegram_user})
+
             if telegram_user.telegram_is_staff:
                 tgbot.admin_filter.add_user_ids(telegram_user.telegram_id)
             elif telegram_user.telegram_id in tgbot.admin_filter.user_ids:

@@ -6,12 +6,18 @@ from xraypanels.xuipanels.clients import Clients
 
 
 class XUI(Login, Inbounds, Clients):
-    def __init__(self, address: str, https: bool = False, session_cookie: str = None):
+    def __init__(self, address: str, username: str, password: str, https: bool = False, session_cookie: str = None):
         self.address = address
         self.https = https
         self.session_cookie = session_cookie
         self.api_url = f'{self.address}/panel/api/inbounds'
+        self._username = username
+        self._password = password
 
 
-panel = XUI(settings.PANEL_ADDRESS)
-panel.login(username=settings.PANEL_USERNAME, password=settings.PANEL_PASSWORD)
+panel = XUI(
+    address=settings.PANEL_ADDRESS,
+    username=settings.PANEL_USERNAME,
+    password=settings.PANEL_PASSWORD
+)
+# panel.login()

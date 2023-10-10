@@ -3,16 +3,18 @@ import logging
 import re
 from logging import handlers
 from warnings import filterwarnings
-
 from asgiref.sync import sync_to_async
-from django.contrib.auth.models import User
-from telegram import Update, ReplyKeyboardRemove
-from telegram.ext import Application, ConversationHandler, CommandHandler, filters, ContextTypes, MessageHandler, \
-    CallbackQueryHandler
-from telegram.warnings import PTBUserWarning
 
 from django.conf import settings
 
+from telegram import Update, ReplyKeyboardRemove, Bot
+from telegram.ext import (Application, ConversationHandler, CommandHandler, filters, ContextTypes, MessageHandler,
+                          CallbackQueryHandler)
+from telegram.request import HTTPXRequest
+from telegram.warnings import PTBUserWarning
+
+
+from django_PTB_persistence.persistence import DjangoPersistence
 from .menus import AdminMenu, UserMenu
 from .enums import UserOrAdminEnum
 from .values.user_values import message_values, button_values
@@ -34,25 +36,34 @@ class XuiBot(UserMenu, AdminMenu):
         elif not webhook_domain or not isinstance(webhook_domain, str) or not webhook_domain.startswith('https://'):
             raise ValueError('webhook domain was not accepted!')
 
-        filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
-        self.application = Application.builder().token(bot_token)
-        if proxy_url:
-            self.application.proxy_url(proxy_url).get_updates_proxy_url(proxy_url)
-        self.application = self.application.build()
-
+        self.bot_token = bot_token
+        self.webhook_domain = webhook_domain
+        self.proxy_url = proxy_url
+        self.application = None
+        self.fallback_handlers = None
         self.admin_filter = filters.User()
         self.banned_user_filter = filters.User()
+        self.bot_started = False
+
+        asyncio.run(self.set_webhook_url())
+
+    def start_bot(self):
+        if self.bot_started:
+            return
+        filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
+
+        application = Application.builder().token(self.bot_token).persistence(DjangoPersistence(namespace='x-ui'))
+        if self.proxy_url:
+            application = application.proxy_url(self.proxy_url).get_updates_proxy_url(self.proxy_url)
+        self.application = application.build()
+
+
         self.fallback_handlers = [
             CommandHandler("start", self.start_menu),
-            CallbackQueryHandler(self.start_menu, pattern=f'^{UserOrAdminEnum.BACK_TO_MAIN_MENU}$'),
+            CallbackQueryHandler(self.start_menu, pattern=f'^{UserOrAdminEnum.BACK_TO_MAIN_MENU.value}$'),
             MessageHandler(filters.Regex(f"^{button_values['back_to_main_menu']}$"), self.start_menu),
             MessageHandler(~filters.COMMAND, self.wrong_input)]
 
-        async def set_webhook_url():
-            async with self.application as application:
-                await application.bot.set_webhook(url=f'{webhook_domain}/webhook/')
-
-        asyncio.run(set_webhook_url())
         self.application.add_handler(MessageHandler(self.banned_user_filter, self.banned))
         self.application.add_handler(ConversationHandler(
             entry_points=[
@@ -60,13 +71,23 @@ class XuiBot(UserMenu, AdminMenu):
                 MessageHandler(~filters.COMMAND, self.first_start),
                 CallbackQueryHandler(callback=self.first_start)],
             states={
-                UserOrAdminEnum.USER: [CallbackQueryHandler(self.start_menu,
-                                                            'back_to_main_menu')] + self.user_handlers(),
-                UserOrAdminEnum.ADMIN: [CallbackQueryHandler(self.start_menu,
-                                                             'back_to_main_menu')] + self.admin_handlers()
+                UserOrAdminEnum.USER.value: [CallbackQueryHandler(self.start_menu,
+                                                                  'back_to_main_menu')] + self.user_handlers(),
+                UserOrAdminEnum.ADMIN.value: [CallbackQueryHandler(self.start_menu,
+                                                                   'back_to_main_menu')] + self.admin_handlers()
             },
-            fallbacks=self.fallback_handlers
+            fallbacks=self.fallback_handlers,
+
+            name='start_handler',
+            persistent=True,
         ))
+
+        self.bot_started = True
+
+    async def set_webhook_url(self):
+        proxy = HTTPXRequest(proxy_url=self.proxy_url) if self.proxy_url else None
+        async with Bot(self.bot_token, request=proxy, get_updates_request=proxy) as bot:
+            await bot.set_webhook(url=f'{self.webhook_domain}/webhook/')
 
     async def start_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         telegram_user: TelegramUser = update.api_kwargs['user_in_model']
@@ -78,17 +99,15 @@ class XuiBot(UserMenu, AdminMenu):
     async def first_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.callback_query:
             await update.callback_query.answer()
-            await update.callback_query.message.reply_text(
-                'با عرض پوزش بابت مشکل به وجود آمده\n ربات مجدد استارت شد\n لطفا گزینه مورد نظر را انتخاب کنید🙏🏻')
-        else:
-            await update.message.reply_text(
-                'با عرض پوزش بابت مشکل به وجود آمده\n ربات مجدد استارت شد\n لطفا گزینه مورد نظر را انتخاب کنید🙏🏻')
+        await update.effective_chat.send_message(
+            'با عرض پوزش بابت مشکل به وجود آمده\n ربات مجدد استارت شد\n لطفا گزینه مورد نظر را انتخاب کنید🙏🏻')
         return await self.start_menu(update, context)
 
     async def banned(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text('ban', reply_markup=ReplyKeyboardRemove())
+        await update.effective_chat.send_message(message_values['banned_message'], reply_markup=ReplyKeyboardRemove())
 
     async def wrong_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        print(update.message.text)
         telegram_user = update.api_kwargs['user_in_model']
         await update.message.reply_text(message_values['wrong_input_error'])
         if not telegram_user.telegram_is_staff:

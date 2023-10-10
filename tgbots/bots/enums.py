@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, auto
 
 
 class UserOrAdminEnum(Enum):
@@ -7,22 +7,14 @@ class UserOrAdminEnum(Enum):
     BACK_TO_MAIN_MENU = 2
 
 
+class UserEnum(Enum):
+    SEND_CONFIG = 10
+
+
+class AdminEnum(Enum):
+    SEND_CLIENT_ARGS = 10
+    SEND_DESIRED_MESSAGE = 11
+
 # class UserMenuEnum(Enum):
 #     FIRST_MENU = 0
 #     SECOND_MENU = 1
-
-
-class UserUpdatedConfig(Enum):
-    SEND_CONFIG = 0
-
-
-class UserConfigInfo(Enum):
-    SEND_CONFIG = 0
-
-
-class AdminNewConfig(Enum):
-    SEND_CLIENT_ARGS = 0
-
-
-class AdminSendMessageToUsers(Enum):
-    SEND_DESIRED_MESSAGE = 0

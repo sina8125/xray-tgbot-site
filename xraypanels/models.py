@@ -158,6 +158,7 @@ class Client(models.Model):
             self.telegram_users_using_config.add(self.telegram_user)
 
     @classmethod
+    @panel.login_decorator
     def get_client_with_client_name(cls, client_name, telegram_user: TelegramUser = None):
         client_traffics, client, inbound = panel.get_client_traffics_by_email(email=client_name)
         if not client:
@@ -198,6 +199,7 @@ class Client(models.Model):
         )
 
     @classmethod
+    @panel.login_decorator
     def get_client_with_uuid(cls, client_uuid, telegram_user: TelegramUser = None):
         client_traffics, client, inbound = panel.get_client_traffics_by_uuid(uuid=client_uuid)
         if not client:
@@ -237,6 +239,7 @@ class Client(models.Model):
             telegram_user=telegram_user
         )
 
+    @panel.login_decorator
     def get_update_client(self, client_traffics=None, client=None, inbound=None):
         if not client_traffics or not client or not inbound:
             client_traffics, client, inbound = panel.get_client_traffics_by_uuid(uuid=str(self.client_uuid),
@@ -268,6 +271,7 @@ class Client(models.Model):
             inbound=inbound
         )
 
+    @panel.login_decorator
     def set_update_client(self, client_name: str = None, client_uuid: UUID = None, inbound_id: int = None,
                           total_flow: int = None, ip_limit: int = None, enable: bool = None,
                           expire_time: datetime = None, price: int = None):
@@ -293,6 +297,7 @@ class Client(models.Model):
         return await sync_to_async(self.set_update_client)(
             **{key: value for key, value in locals().items() if (key != 'self' and value is not None)})
 
+    @panel.login_decorator
     def reset_client_traffics(self):
         reset_request = panel.reset_client_traffics(email=self.client_name,
                                                     uuid=str(self.client_uuid),
@@ -307,6 +312,7 @@ class Client(models.Model):
     async def areset_client_traffics(self):
         return await sync_to_async(self.reset_client_traffics)()
 
+    @panel.login_decorator
     def add_client(self):
         if not self.client_inbound:
             raise ValidationError('inbound id must be not null for add client!\nplease set inbound id for client')
