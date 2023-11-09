@@ -192,7 +192,7 @@ class XuiBot:
 
     @proxy_url.setter
     def proxy_url(self, proxy_url: str):
-        if not proxy_url or not isinstance(proxy_url, str):
+        if proxy_url is not None and (not proxy_url or not isinstance(proxy_url, str)):
             raise TypeError('proxy url was not accepted!')
         self.__proxy_url = proxy_url
 
