@@ -86,7 +86,8 @@ class XuiBot:
         proxy = HTTPXRequest(proxy_url=self.proxy_url) if self.proxy_url else None
         async with Bot(self.bot_token, request=proxy, get_updates_request=proxy) as bot:
             await bot.set_webhook(url=f'{self.webhook_domain}/webhook/')
-        await proxy.shutdown()
+        if proxy:
+            await proxy.shutdown()
 
     async def add_update(self, update: Update):
         async with self.application as application:
