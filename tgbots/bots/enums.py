@@ -14,6 +14,7 @@ class UserEnum(Enum):
 class AdminEnum(Enum):
     SEND_CLIENT_ARGS = 10
     SEND_DESIRED_MESSAGE = 11
+    SEND_CLIENT_NUMER_OR_CONFIG = 12
 
 # class UserMenuEnum(Enum):
 #     FIRST_MENU = 0

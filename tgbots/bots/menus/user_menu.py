@@ -3,66 +3,32 @@ import base64
 import json
 import re
 import jdatetime
+from asgiref.sync import sync_to_async
 
 from django.core.exceptions import ValidationError
 
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
-from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler, filters,
-                          CallbackQueryHandler, CommandHandler)
+from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler, filters, BaseHandler)
 
+from .menu import Menu
 from tgbots.models import TelegramUser
 from xraypanels.models import Client
 from ..enums import UserOrAdminEnum, UserEnum
-from ..values.user_values import button_values, message_values
+from tgbots.bots.values import button_values, message_values
 
 
-class UserMenu:
-    def user_handlers(self):
-        handlers_list = list()
-        update_handler = ConversationHandler(
-            entry_points=[
-                MessageHandler(filters.Regex(f"^{button_values['get_updated_config']}$"), self.get_update_config)
-            ],
-            states={
-                UserEnum.SEND_CONFIG.value: [
-                    MessageHandler(filters.Regex(r'vmess://[\w+\-=/]+'), self.create_update_config),
-                    MessageHandler(
-                        filters.Regex(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}'),
-                        self.create_update_config)
-                ]},
-            fallbacks=self.fallback_handlers,
-            map_to_parent={
-                UserOrAdminEnum.USER.value: UserOrAdminEnum.USER.value
-            },
-            persistent=True,
-            name='user_update_handler'
-        )
+class UserMenu(Menu):
 
-        config_info_handler = ConversationHandler(
-            entry_points=[
-                MessageHandler(filters.Regex(f"^{button_values['get_config_info']}$"), self.get_config_info)
-            ],
-            states={
-                UserEnum.SEND_CONFIG.value: [
-                    MessageHandler(filters.Regex(r'vmess://[\w+\-=/]+'), self.config_info),
-                    MessageHandler(
-                        filters.Regex(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}'),
-                        self.config_info)
-                ]
-            },
-            fallbacks=self.fallback_handlers,
-            map_to_parent={
-                UserOrAdminEnum.USER.value: UserOrAdminEnum.USER.value
-            },
-            persistent=True,
-            name='user_config_info_handler'
-        )
+    def __init__(self, bot):
+        super().__init__(bot)
 
-        handlers_list.append(update_handler)
-        handlers_list.append(config_info_handler)
-        handlers_list.append(
-            MessageHandler(filters.Regex(f"^{button_values['admin_panel']}$") & (self.admin_filter or None),
-                           self.admin_panel))
+    def handlers(self):
+        handlers_list = [
+            self.__update_config_handler(),
+            self.__config_info_handler(),
+
+            self.__admin_panel_handler()
+        ]
         return handlers_list
 
     async def start_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -81,74 +47,85 @@ class UserMenu:
 
         await update.effective_chat.send_message(
             message_values['start_menu_message'].format(full_name=telegram_user.get_telegram_full_name()),
-            reply_markup=ReplyKeyboardMarkup(keyboard,
-                                             resize_keyboard=True))
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
         return UserOrAdminEnum.USER.value
 
-    async def get_client_with_config_uuid(self, message: str, telegram_user: TelegramUser):
-        client_uuid = None
-        client_name = None
-        try:
-            match = re.findall(r'vmess://[\w+\-=/]+', message)
-            if match:
-                config_link = match[0]
-                config_base64 = config_link.removeprefix('vmess://')
-                config_dict = json.loads(base64.urlsafe_b64decode(config_base64).decode())
-                client_uuid = config_dict['id']
-                config_number = re.match(r'^\d{4}', config_dict['ps'])
-                if config_number:
-                    client_name = f'{config_number.group(0)}_Tel:@Sina8125'
+    # async def __get_client_with_config_uuid(self, message: str, telegram_user: TelegramUser):
+    #     client_uuid = None
+    #     try:
+    #         match = re.findall(r'vmess://[\w+\-=/]+', message)
+    #         if match:
+    #             config_link = match[0]
+    #             config_base64 = config_link.removeprefix('vmess://')
+    #             config_dict = json.loads(base64.urlsafe_b64decode(config_base64).decode())
+    #             client_uuid = config_dict['id']
+    #             # config_number = re.match(r'^\d{4}', config_dict['ps'])
+    #             # if config_number:
+    #             #     client_name = f'{config_number.group(0)}_Tel:@Sina8125'
+    #
+    #         else:
+    #             match = re.search(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}',
+    #                               message)
+    #             if match:
+    #                 client_uuid = match.group(0)
+    #     except Exception as e:
+    #         print(e, file=open("tgbots/bots/bot.log", 'a+'))
+    #         raise ValidationError('vmess link incorrect!', code=400)
+    #
+    #     try:
+    #         client, created = await Client.aget_client_with_uuid(
+    #             client_uuid=client_uuid,
+    #             telegram_user=telegram_user
+    #         )
+    #         await client.telegram_users_using_config.aadd(telegram_user)
+    #         return client
+    #     except (ValidationError, Exception) as e:
+    #         if isinstance(e, ValidationError):
+    #             client_from_db = await sync_to_async(Client.objects.filter(client_uuid=client_uuid).last)()
+    #             if client_from_db and not client_from_db.active:
+    #                 return client_from_db
+    #         # if created:
+    #         #     await client.adelete()
+    #         print(e, file=open("tgbots/bots/bot.log", 'a+'))
+    #         raise ValidationError('client create or update error!', code=404)
 
-            else:
-                match = re.search(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}',
-                                  message)
-                if match:
-                    client_uuid = match.group(0)
+    def __update_config_handler(self) -> BaseHandler:
+        return ConversationHandler(
+            entry_points=[
+                MessageHandler(filters.Regex(f"^{button_values['get_updated_config']}$"), self.__get_update_config)
+            ],
+            states={
+                UserEnum.SEND_CONFIG.value: [
+                    MessageHandler(filters.Regex(r'vmess://[\w+\-=/]+'), self.__create_update_config),
+                    MessageHandler(
+                        filters.Regex(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}'),
+                        self.__create_update_config)
+                ]},
+            fallbacks=self.bot.fallback_handlers,
+            map_to_parent={
+                UserOrAdminEnum.USER.value: UserOrAdminEnum.USER.value
+            },
+            persistent=True,
+            name='user_update_config_handler'
+        )
 
-        except Exception as e:
-            print(e, file=open("tgbots/bots/bot.log", 'a+'))
-            raise ValidationError('vmess link incorrect!', code=400)
-        try:
-            client, created = await Client.objects.aget_or_create(client_uuid=client_uuid,
-                                                                  defaults={
-                                                                      'client_name': client_name,
-                                                                      'telegram_user': telegram_user})
-            await client.telegram_users_using_config.aadd(telegram_user)
-            await client.aget_update_client()
-            return client
-        except (ValidationError, Exception) as e:
-            if isinstance(e, ValidationError) and not created and not client.active:
-                return client
-            # if created:
-            #     await client.adelete()
-            print(e, file=open("tgbots/bots/bot.log", 'a+'))
-            raise ValidationError('client create or update error!', code=404)
-
-    async def get_update_config(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def __get_update_config(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[button_values['back_to_main_menu']]]
         await update.message.reply_text(message_values['send_config_for_update'],
                                         reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
         return UserEnum.SEND_CONFIG.value
 
-    async def create_update_config(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def __create_update_config(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
-            client: Client = await self.get_client_with_config_uuid(update.message.text,
-                                                                    update.api_kwargs['user_in_model'])
+            client: Client = await self._get_client_with_config_uuid(update.message.text,
+                                                                     update.api_kwargs['user_in_model'])
         except ValidationError as e:
-            if e.code == 400:
-                await update.message.reply_text(message_values['vmess_or_uuid_error'])
-                return await self.get_update_config(update, context)
-            elif e.code == 404:
-                await update.message.reply_text(message_values['config_not_found_or_error'])
-            else:
-                print(e, file=open("tgbots/bots/bot.log", 'a+'))
-                await update.message.reply_text(message_values['problem_error'])
-            return await self.start_menu(update, context)
+            return await self._get_client_exception_handler(e, update, context, self.__get_update_config)
 
         config1, config2 = client.connection_links
         if not config1:
             await update.message.reply_text(message_values['config_not_found_or_error'])
-            return await self.start_menu(update, context)
+            return await super().start_menu(update, context)
 
         response_message = message_values['config_update_message'].format(config1=config1, config2=config2,
                                                                           client_name=client.client_name.replace('_',
@@ -157,28 +134,44 @@ class UserMenu:
                                         reply_markup=ReplyKeyboardMarkup([[button_values['back_to_main_menu']]],
                                                                          resize_keyboard=True))
         return UserOrAdminEnum.USER.value
-        # return await self.start_menu(update, context)
+        # return await super().start_menu(update, context)
 
-    async def get_config_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    def __config_info_handler(self) -> BaseHandler:
+        return ConversationHandler(
+            entry_points=[
+                MessageHandler(filters.Regex(f"^{button_values['get_config_info']}$"), self.__get_config_info)
+            ],
+            states={
+                UserEnum.SEND_CONFIG.value: [
+                    MessageHandler(filters.Regex(r'vmess://[\w+\-=/]+'), self.__config_info),
+                    MessageHandler(
+                        filters.Regex(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}'),
+                        self.__config_info)
+                ]
+            },
+            fallbacks=self.bot.fallback_handlers,
+            map_to_parent={
+                UserOrAdminEnum.USER.value: UserOrAdminEnum.USER.value
+            },
+            persistent=True,
+            name='user_config_info_handler'
+        )
+
+    async def __get_config_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[button_values['back_to_main_menu']]]
         await update.message.reply_text(message_values['send_config_to_get_info'],
                                         reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
         return UserEnum.SEND_CONFIG.value
 
-    async def config_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def __config_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        waiting_message = await update.message.reply_text('⏳')
+        await asyncio.sleep(2)
         try:
-            client: Client = await self.get_client_with_config_uuid(update.message.text,
-                                                                    update.api_kwargs['user_in_model'])
+            client: Client = await self._get_client_with_config_uuid(update.message.text,
+                                                                     update.api_kwargs['user_in_model'])
         except ValidationError as e:
-            if e.code == 400:
-                await update.message.reply_text(message_values['vmess_or_uuid_error'])
-                return await self.get_config_info(update, context)
-            elif e.code == 404:
-                await update.message.reply_text(message_values['config_not_found_or_error'])
-            else:
-                print(e, file=open("tgbots/bots/bot.log", 'a+'))
-                await update.message.reply_text(message_values['problem_error'])
-            return await self.start_menu(update, context)
+            await waiting_message.delete()
+            return await self._get_client_exception_handler(e, update, context, self.__get_config_info)
 
         client_status = '🟢فعال🟢' if client.active else '🔴غیرفعال🔴'
         remaining_time = "{days} روز و {H}:{M}:{S}".format(days=client.get_remaining_time.days,
@@ -202,69 +195,54 @@ class UserMenu:
                 '%Y/%m/%d %H:%M:%S')
 
         button = [
-            [InlineKeyboardButton(text=client.client_name, callback_data=1),
-             InlineKeyboardButton(text='👤نام اشتراک', callback_data=2)],
-            [InlineKeyboardButton(text=client_status, callback_data=3),
-             InlineKeyboardButton(text='🔘وضعیت', callback_data=4)],
-            [InlineKeyboardButton(text=f'{client.get_total_upload[0]} {client.get_total_upload[1]}', callback_data=5),
-             InlineKeyboardButton(text='🔼آپلود', callback_data=6)],
+            [InlineKeyboardButton(text=client.client_name, callback_data='1'),
+             InlineKeyboardButton(text='👤نام اشتراک', callback_data='1')],
+            [InlineKeyboardButton(text=client_status, callback_data='1'),
+             InlineKeyboardButton(text='🔘وضعیت', callback_data='1')],
+            [InlineKeyboardButton(text=f'{client.get_total_upload[0]} {client.get_total_upload[1]}', callback_data='1'),
+             InlineKeyboardButton(text='🔼آپلود', callback_data='1')],
             [InlineKeyboardButton(text=f'{client.get_total_download[0]} {client.get_total_download[1]}',
-                                  callback_data=7),
-             InlineKeyboardButton(text='🔽دانلود', callback_data=8)],
-            [InlineKeyboardButton(text=f'{client.get_total_usage[0]} {client.get_total_usage[1]}', callback_data=9),
-             InlineKeyboardButton(text='🔃حجم مصرفی', callback_data=10)],
+                                  callback_data='1'),
+             InlineKeyboardButton(text='🔽دانلود', callback_data='1')],
+            [InlineKeyboardButton(text=f'{client.get_total_usage[0]} {client.get_total_usage[1]}', callback_data='1'),
+             InlineKeyboardButton(text='🔃حجم مصرفی', callback_data='1')],
             [InlineKeyboardButton(
                 text=total_flow,
-                callback_data=11),
-                InlineKeyboardButton(text='🔄حجم کل', callback_data=12)],
+                callback_data='1'),
+                InlineKeyboardButton(text='🔄حجم کل', callback_data='1')],
             [InlineKeyboardButton(
                 text=total_remaining,
-                callback_data=13),
-                InlineKeyboardButton(text='🔁حجم باقی مانده', callback_data=14)],
-            [InlineKeyboardButton(text=expire_time_ad, callback_data=15),
-             InlineKeyboardButton(text='📅تاریخ اتمام(میلادی)', callback_data=16)],
+                callback_data='1'),
+                InlineKeyboardButton(text='🔁حجم باقی مانده', callback_data='1')],
+            [InlineKeyboardButton(text=expire_time_ad, callback_data='1'),
+             InlineKeyboardButton(text='📅تاریخ اتمام(میلادی)', callback_data='1')],
             [InlineKeyboardButton(
                 text=expire_time_solar,
-                callback_data=17),
-                InlineKeyboardButton(text='📅تاریخ اتمام(شمسی)', callback_data=18)],
+                callback_data='1'),
+                InlineKeyboardButton(text='📅تاریخ اتمام(شمسی)', callback_data='1')],
             [InlineKeyboardButton(text=remaining_time if client.expire_time.timestamp() != 0 else 'نامحدود',
-                                  callback_data=19),
-             InlineKeyboardButton(text='⏳زمان باقی مانده', callback_data=20)],
+                                  callback_data='1'),
+             InlineKeyboardButton(text='⏳زمان باقی مانده', callback_data='1')],
             [InlineKeyboardButton(text=button_values['back_to_main_menu'],
                                   callback_data=str(UserOrAdminEnum.BACK_TO_MAIN_MENU.value))]
         ]
-        waiting_message = await update.message.reply_text('⏳')
-        await asyncio.sleep(2)
         await waiting_message.delete()
         await update.message.reply_text(message_values['config_info_message'],
                                         reply_markup=InlineKeyboardMarkup(button))
         return UserOrAdminEnum.USER.value
 
-    async def admin_panel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    def __admin_panel_handler(self) -> BaseHandler:
+        return MessageHandler(filters.Regex(f"^{button_values['admin_panel']}$") & (self.bot.admin_filter or None),
+                              self.__admin_panel)
+
+    async def __admin_panel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         telegram_user: TelegramUser = update.api_kwargs['user_in_model']
         if not telegram_user.telegram_is_staff:
             await update.message.reply_text('حساب شما ادمین نیست!')
-            return await self.start_menu(update, context)
+            return await super().start_menu(update, context)
         elif telegram_user.is_now_admin:
             await update.message.reply_text('الان ادمین هستی! یه دور استارت کن به نظرم')
-            return await self.start_menu(update, context)
+            return await super().start_menu(update, context)
         telegram_user.is_now_admin = True
         await telegram_user.asave(update_fields=['is_now_admin'])
-        return await self.start_menu(update, context)
-
-    async def wrong_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(message_values['wrong_input_error'])
-        return await self.start_menu(update, context)
-
-    def remove_button(self, button_data, keyboard):
-        updated_keyboard = []
-
-        for row in keyboard:
-            updated_row = []
-            for button in row:
-                if button.callback_data != button_data:
-                    updated_row.append(button)
-            if updated_row:
-                updated_keyboard.append(updated_row)
-
-        return updated_keyboard
+        return await super().start_menu(update, context)

@@ -1,4 +1,5 @@
 import requests
+from django.utils import timezone
 
 import xraypanels.xuipanels
 
@@ -6,8 +7,6 @@ import xraypanels.xuipanels
 class Login:
 
     def login(self: "xraypanels.xuipanels.XUI"):
-        if self.session_cookie:
-            return True
         login_request = requests.post(url=f'{self.address}/login/',
                                       cookies=None,
                                       data={'username': self._username, 'password': self._password},
@@ -21,9 +20,11 @@ class Login:
         else:
             return False
 
-    def login_decorator(self, func):
+    def login_decorator(self: 'xraypanels.xuipanels.XUI', func):
         def inner_login(*args, **kwargs):
-            self.login()
+            if not self.login_time or timezone.now() - self.login_time > timezone.timedelta(days=10):
+                self.login()
+                self.login_time = timezone.now()
             return func(*args, **kwargs)
 
         return inner_login

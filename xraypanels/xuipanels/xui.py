@@ -10,6 +10,7 @@ class XUI(Login, Inbounds, Clients):
         self.address = address
         self.https = https
         self.session_cookie = session_cookie
+        self.login_time = None
         self.api_url = f'{self.address}/panel/api/inbounds'
         self._username = username
         self._password = password

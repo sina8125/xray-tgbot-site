@@ -26,6 +26,7 @@ class GetConfigView(TemplateView):
 class StartBot(APIView):
 
     def post(self, request):
+        update = None
         try:
             tgbot.start_bot()
             request_body = json.loads(request.body)
@@ -49,11 +50,7 @@ class StartBot(APIView):
                 tgbot.banned_user_filter.remove_user_ids(telegram_user.telegram_id)
         except Exception as e:
             print(e, file=open("tgbots/bots/bot.log", 'a+'))
-            pass
+            return Response(status=status.HTTP_400_BAD_REQUEST)
 
-        async def start():
-            async with tgbot.application as application:
-                await application.process_update(update)
-
-        asyncio.run(start())
+        asyncio.run(tgbot.add_update(update))
         return Response(status=status.HTTP_200_OK)

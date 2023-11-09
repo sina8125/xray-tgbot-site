@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 from datetime import timedelta
 from os.path import normpath, join, splitext
 from uuid import UUID
@@ -158,11 +159,7 @@ class Client(models.Model):
             self.telegram_users_using_config.add(self.telegram_user)
 
     @classmethod
-    @panel.login_decorator
-    def get_client_with_client_name(cls, client_name, telegram_user: TelegramUser = None):
-        client_traffics, client, inbound = panel.get_client_traffics_by_email(email=client_name)
-        if not client:
-            raise ValidationError('client not found!')
+    def __get_or_create_client(cls, client, client_traffics, inbound, telegram_user):
         client_inbound, created = Inbound.objects.update_or_create(inbound_id=inbound['id'],
                                                                    defaults={
                                                                        'inbound_name': inbound['remark'],
@@ -185,11 +182,23 @@ class Client(models.Model):
                                                                      'down'],
                                                                  'ip_limit': client['limitIp']
                                                              })
-        if telegram_user and (created or not client_model.telegram_user):
-            client_model.telegram_user = telegram_user
-            client_model.save(update_fields=['telegram_user'])
-
+        if telegram_user:
+            client_model.telegram_users_using_config.add(telegram_user)
+            if created or not client_model.telegram_user:
+                client_model.telegram_user = telegram_user
+                client_model.save(update_fields=['telegram_user'])
         return client_model, created
+
+    @classmethod
+    @panel.login_decorator
+    def get_client_with_client_name(cls, client_name, telegram_user: TelegramUser = None):
+        if not isinstance(telegram_user, TelegramUser):
+            raise TypeError('telegram_user most be type or subtype of TelegramUser class')
+
+        client_traffics, client, inbound = panel.get_client_traffics_by_email(email=client_name)
+        if not client:
+            raise ValidationError('client not found!', code=404)
+        return cls.__get_or_create_client(client, client_traffics, inbound, telegram_user)
 
     @classmethod
     async def aget_client_with_client_name(cls, client_name, telegram_user: TelegramUser = None):
@@ -201,36 +210,16 @@ class Client(models.Model):
     @classmethod
     @panel.login_decorator
     def get_client_with_uuid(cls, client_uuid, telegram_user: TelegramUser = None):
+        if not isinstance(telegram_user, TelegramUser):
+            raise TypeError('telegram_user most be type or subtype of TelegramUser class')
+
         client_traffics, client, inbound = panel.get_client_traffics_by_uuid(uuid=client_uuid)
         if not client:
-            raise ValidationError('client not found!')
-        client_inbound, created = Inbound.objects.update_or_create(inbound_id=inbound['id'],
-                                                                   defaults={
-                                                                       'inbound_name': inbound['remark'],
-                                                                       'active': inbound['enable'],
-                                                                       'port': inbound['port']
-                                                                   })
-        client_model, created = cls.objects.update_or_create(client_uuid=client['id'],
-                                                             defaults={
-                                                                 'client_inbound': client_inbound,
-                                                                 'client_name': client_traffics['email'],
-                                                                 'active': client_traffics['enable'] and client[
-                                                                     'enable'] and inbound['enable'],
-                                                                 'total_upload': client_traffics['up'],
-                                                                 'total_download': client_traffics['down'],
-                                                                 'total_flow': client_traffics['total'],
-                                                                 'expire_time': datetime.fromtimestamp(
-                                                                     client_traffics['expiryTime'] / 1000,
-                                                                     tz=timezone.get_default_timezone()),
-                                                                 'total_usage': client_traffics['up'] + client_traffics[
-                                                                     'down'],
-                                                                 'ip_limit': client['limitIp']
-                                                             })
-        if telegram_user and (created or not client_model.telegram_user):
-            client_model.telegram_user = telegram_user
-            client_model.save(update_fields=['telegram_user'])
-
-        return client_model, created
+            client_from_db = Client.objects.filter(client_uuid=client_uuid).last()
+            if client_from_db and not client_from_db.active:
+                return client_from_db
+            raise ValidationError('client not found!', code=404)
+        return cls.__get_or_create_client(client, client_traffics, inbound, telegram_user)
 
     @classmethod
     async def aget_client_with_uuid(cls, client_uuid, telegram_user: TelegramUser = None):
@@ -238,6 +227,37 @@ class Client(models.Model):
             client_uuid=client_uuid,
             telegram_user=telegram_user
         )
+
+    @staticmethod
+    def export_uuid(text: str):
+        if not isinstance(text, str):
+            raise TypeError('text most be str!')
+        client_uuid = None
+        match = re.findall(r'vmess://[\w+\-=/]+', text)
+        if match:
+            config_link = match[0]
+            config_base64 = config_link.removeprefix('vmess://')
+            config_dict = json.loads(base64.urlsafe_b64decode(config_base64).decode())
+            client_uuid = config_dict['id']
+        else:
+            match = re.search(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}',
+                              text)
+            if match:
+                client_uuid = match.group(0)
+            else:
+                raise ValidationError('vmess link or uuid incorrect!', code=400)
+        return client_uuid
+
+    @staticmethod
+    def export_name(text: str):
+        if not isinstance(text, str):
+            raise TypeError('text most be str!')
+        config_number = re.match(r'^\d{4}', text)
+        if config_number:
+            client_name = f'{config_number.group(0)}_Tel:@Sina8125'
+        else:
+            raise ValidationError('client name incorrect!', code=400)
+        return client_name
 
     @panel.login_decorator
     def get_update_client(self, client_traffics=None, client=None, inbound=None):
