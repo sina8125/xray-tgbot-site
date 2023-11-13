@@ -173,59 +173,8 @@ class UserMenu(Menu):
             await waiting_message.delete()
             return await self._get_client_exception_handler(e, update, context, self.__get_config_info)
 
-        client_status = '🟢فعال🟢' if client.active else '🔴غیرفعال🔴'
-        remaining_time = "{days} روز و {H}:{M}:{S}".format(days=client.get_remaining_time.days,
-                                                           H=(
-                                                                   client.get_remaining_time.seconds // 3600),
-                                                           M=(
-                                                                     client.get_remaining_time.seconds % 3600) // 60,
-                                                           S=(client.get_remaining_time.seconds % 60))
-        total_flow = f'{client.get_total_flow[0]} {client.get_total_flow[1]}' if client.get_total_flow[
-                                                                                     0] != 0 else 'نامحدود'
-        total_remaining = f'{client.get_total_remaining[0]} {client.get_total_remaining[1]}' if client.get_total_flow[
-                                                                                                    0] != 0 else 'نامحدود'
-        if client.expire_time.timestamp() < 0 and client.active:
-            expire_time_ad = expire_time_solar = '30 روز از زمان اتصال'
-        elif client.expire_time.timestamp() == 0:
-            expire_time_ad = expire_time_solar = 'نامحدود'
-        else:
-            expire_time_ad = client.expire_time.strftime(
-                '%Y/%m/%d %H:%M:%S')
-            expire_time_solar = jdatetime.datetime.fromgregorian(datetime=client.expire_time).strftime(
-                '%Y/%m/%d %H:%M:%S')
+        button = self._config_info_message_inline_keyboard(client)
 
-        button = [
-            [InlineKeyboardButton(text=client.client_name, callback_data='1'),
-             InlineKeyboardButton(text='👤نام اشتراک', callback_data='1')],
-            [InlineKeyboardButton(text=client_status, callback_data='1'),
-             InlineKeyboardButton(text='🔘وضعیت', callback_data='1')],
-            [InlineKeyboardButton(text=f'{client.get_total_upload[0]} {client.get_total_upload[1]}', callback_data='1'),
-             InlineKeyboardButton(text='🔼آپلود', callback_data='1')],
-            [InlineKeyboardButton(text=f'{client.get_total_download[0]} {client.get_total_download[1]}',
-                                  callback_data='1'),
-             InlineKeyboardButton(text='🔽دانلود', callback_data='1')],
-            [InlineKeyboardButton(text=f'{client.get_total_usage[0]} {client.get_total_usage[1]}', callback_data='1'),
-             InlineKeyboardButton(text='🔃حجم مصرفی', callback_data='1')],
-            [InlineKeyboardButton(
-                text=total_flow,
-                callback_data='1'),
-                InlineKeyboardButton(text='🔄حجم کل', callback_data='1')],
-            [InlineKeyboardButton(
-                text=total_remaining,
-                callback_data='1'),
-                InlineKeyboardButton(text='🔁حجم باقی مانده', callback_data='1')],
-            [InlineKeyboardButton(text=expire_time_ad, callback_data='1'),
-             InlineKeyboardButton(text='📅تاریخ اتمام(میلادی)', callback_data='1')],
-            [InlineKeyboardButton(
-                text=expire_time_solar,
-                callback_data='1'),
-                InlineKeyboardButton(text='📅تاریخ اتمام(شمسی)', callback_data='1')],
-            [InlineKeyboardButton(text=remaining_time if client.expire_time.timestamp() != 0 else 'نامحدود',
-                                  callback_data='1'),
-             InlineKeyboardButton(text='⏳زمان باقی مانده', callback_data='1')],
-            [InlineKeyboardButton(text=button_values['back_to_main_menu'],
-                                  callback_data=str(UserOrAdminEnum.BACK_TO_MAIN_MENU.value))]
-        ]
         await waiting_message.delete()
         await update.message.reply_text(message_values['config_info_message'],
                                         reply_markup=InlineKeyboardMarkup(button))

@@ -91,7 +91,7 @@ class Client(models.Model):
 
         def create_link(address, host, operator):
             vmess_config = {
-                "add": f"{address}.sinarahimi.tk",
+                "add": f"{address}.si2ray.site",
                 "aid": "0",
                 "alpn": "",
                 "fp": "",
@@ -192,7 +192,7 @@ class Client(models.Model):
     @classmethod
     @panel.login_decorator
     def get_client_with_client_name(cls, client_name, telegram_user: TelegramUser = None):
-        if not isinstance(telegram_user, TelegramUser):
+        if telegram_user and not isinstance(telegram_user, TelegramUser):
             raise TypeError('telegram_user most be type or subtype of TelegramUser class')
 
         client_traffics, client, inbound = panel.get_client_traffics_by_email(email=client_name)
@@ -210,7 +210,7 @@ class Client(models.Model):
     @classmethod
     @panel.login_decorator
     def get_client_with_uuid(cls, client_uuid, telegram_user: TelegramUser = None):
-        if not isinstance(telegram_user, TelegramUser):
+        if telegram_user and not isinstance(telegram_user, TelegramUser):
             raise TypeError('telegram_user most be type or subtype of TelegramUser class')
 
         client_traffics, client, inbound = panel.get_client_traffics_by_uuid(uuid=client_uuid)

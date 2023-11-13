@@ -8,7 +8,8 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import (BaseHandler, ContextTypes, ConversationHandler, MessageHandler, filters, CommandHandler)
+from telegram.ext import (BaseHandler, ContextTypes, ConversationHandler, MessageHandler, filters, CommandHandler,
+                          CallbackQueryHandler)
 
 from .menu import Menu
 from tgbots.bots.values import message_values, button_values
@@ -171,12 +172,15 @@ class AdminMenu(Menu):
             ],
             states={
                 AdminEnum.SEND_CLIENT_NUMER_OR_CONFIG.value: [
-                    MessageHandler(filters.Regex(r'vmess://[\w+\-=/]+'), self.__admin_get_config_info),
+                    MessageHandler(filters.Regex(r'vmess://[\w+\-=/]+'), self.__config_info_with_uuid),
                     MessageHandler(
                         filters.Regex(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}'),
-                        self.__admin_get_config_info),
+                        self.__config_info_with_uuid),
                     MessageHandler(filters.Regex(re.compile(r'^\d{4}(_Tel:@Sina8125)?$', re.IGNORECASE)),
-                                   self.__admin_get_config_info)
+                                   self.__config_info_with_number)
+                ],
+                AdminEnum.GET_CLIENT_TELEGRAM_USER.value: [
+                    CallbackQueryHandler(self.__get_client_telegram_user_info, re.compile(r'^telegram_user_\d+$'))
                 ]
             },
             fallbacks=self.bot.fallback_handlers,
@@ -184,89 +188,61 @@ class AdminMenu(Menu):
                 UserOrAdminEnum.ADMIN.value: UserOrAdminEnum.ADMIN.value
             },
             persistent=True,
-            name='admin_config_info_handler'
+            name='admin_config_info_handler',
+            per_user=True
         )
 
     async def __get_number_or_config(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[button_values['back_to_main_menu']]]
-        await update.message.reply_text(message_values['send_config_or_uuid'],
+        await update.message.reply_text(message_values['send_config_to_get_info'],
                                         reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
         return AdminEnum.SEND_CLIENT_NUMER_OR_CONFIG.value
 
-    async def __admin_get_config_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        try:
-            client: Client = await self.__get_client_with_config_uuid(update.message.text,
-                                                                      update.api_kwargs['user_in_model'])
-        except ValidationError as e:
-            if e.code == 400:
-                await update.message.reply_text(message_values['vmess_or_uuid_error'])
-                return await self.__get_number_or_config(update, context)
-            elif e.code == 404:
-                await update.message.reply_text(message_values['config_not_found_or_error'])
-            else:
-                print(e, file=open("tgbots/bots/bot.log", 'a+'))
-                await update.message.reply_text(message_values['problem_error'])
-            return await super().start_menu(update, context)
-
-        client_status = '🟢فعال🟢' if client.active else '🔴غیرفعال🔴'
-        remaining_time = "{days} روز و {H}:{M}:{S}".format(days=client.get_remaining_time.days,
-                                                           H=(
-                                                                   client.get_remaining_time.seconds // 3600),
-                                                           M=(
-                                                                     client.get_remaining_time.seconds % 3600) // 60,
-                                                           S=(client.get_remaining_time.seconds % 60))
-        total_flow = f'{client.get_total_flow[0]} {client.get_total_flow[1]}' if client.get_total_flow[
-                                                                                     0] != 0 else 'نامحدود'
-        total_remaining = f'{client.get_total_remaining[0]} {client.get_total_remaining[1]}' if client.get_total_flow[
-                                                                                                    0] != 0 else 'نامحدود'
-        if client.expire_time.timestamp() < 0 and client.active:
-            expire_time_ad = expire_time_solar = '30 روز از زمان اتصال'
-        elif client.expire_time.timestamp() == 0:
-            expire_time_ad = expire_time_solar = 'نامحدود'
-        else:
-            expire_time_ad = client.expire_time.strftime(
-                '%Y/%m/%d %H:%M:%S')
-            expire_time_solar = jdatetime.datetime.fromgregorian(datetime=client.expire_time).strftime(
-                '%Y/%m/%d %H:%M:%S')
-
-        button = [
-            [InlineKeyboardButton(text=client.client_name, callback_data=1),
-             InlineKeyboardButton(text='👤نام اشتراک', callback_data=2)],
-            [InlineKeyboardButton(text=client_status, callback_data=3),
-             InlineKeyboardButton(text='🔘وضعیت', callback_data=4)],
-            [InlineKeyboardButton(text=f'{client.get_total_upload[0]} {client.get_total_upload[1]}', callback_data=5),
-             InlineKeyboardButton(text='🔼آپلود', callback_data=6)],
-            [InlineKeyboardButton(text=f'{client.get_total_download[0]} {client.get_total_download[1]}',
-                                  callback_data=7),
-             InlineKeyboardButton(text='🔽دانلود', callback_data=8)],
-            [InlineKeyboardButton(text=f'{client.get_total_usage[0]} {client.get_total_usage[1]}', callback_data=9),
-             InlineKeyboardButton(text='🔃حجم مصرفی', callback_data=10)],
-            [InlineKeyboardButton(
-                text=total_flow,
-                callback_data=11),
-                InlineKeyboardButton(text='🔄حجم کل', callback_data=12)],
-            [InlineKeyboardButton(
-                text=total_remaining,
-                callback_data=13),
-                InlineKeyboardButton(text='🔁حجم باقی مانده', callback_data=14)],
-            [InlineKeyboardButton(text=expire_time_ad, callback_data=15),
-             InlineKeyboardButton(text='📅تاریخ اتمام(میلادی)', callback_data=16)],
-            [InlineKeyboardButton(
-                text=expire_time_solar,
-                callback_data=17),
-                InlineKeyboardButton(text='📅تاریخ اتمام(شمسی)', callback_data=18)],
-            [InlineKeyboardButton(text=remaining_time if client.expire_time.timestamp() != 0 else 'نامحدود',
-                                  callback_data=19),
-             InlineKeyboardButton(text='⏳زمان باقی مانده', callback_data=20)],
-            [InlineKeyboardButton(text=button_values['back_to_main_menu'],
-                                  callback_data=str(UserOrAdminEnum.BACK_TO_MAIN_MENU.value))]
-        ]
+    async def __config_info_with_uuid(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         waiting_message = await update.message.reply_text('⏳')
         await asyncio.sleep(2)
+        try:
+            client: Client = await self._get_client_with_config_uuid(update.message.text)
+        except ValidationError as e:
+            await waiting_message.delete()
+            return await self._get_client_exception_handler(e, update, context, self.__get_number_or_config)
+
+        response = await self.__admin_get_config_info(client, update, context)
         await waiting_message.delete()
+        return response
+
+    async def __config_info_with_number(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        waiting_message = await update.message.reply_text('⏳')
+        await asyncio.sleep(2)
+        try:
+            client: Client = await self._get_client_with_config_name(update.message.text)
+        except ValidationError as e:
+            await waiting_message.delete()
+            return await self._get_client_exception_handler(e, update, context, self.__get_number_or_config)
+
+        response = await self.__admin_get_config_info(client, update, context)
+        await waiting_message.delete()
+        return response
+
+    async def __admin_get_config_info(self, client: Client, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        button = self._config_info_message_inline_keyboard(client)
+        if client.telegram_user:
+            button.insert(
+                -1,
+                [
+                    InlineKeyboardButton(str(client.telegram_user),
+                                         callback_data=f'telegram_user_{client.telegram_user.pk}', ),
+                    InlineKeyboardButton('کاربر:', callback_data='-1')
+                ])
         await update.message.reply_text(message_values['config_info_message'],
                                         reply_markup=InlineKeyboardMarkup(button))
-        return UserOrAdminEnum.USER.value
+        return AdminEnum.GET_CLIENT_TELEGRAM_USER.value
+
+    async def __get_client_telegram_user_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        client_telegram_user_pk = re.match(r'^telegram_user_(\d+)$', update.callback_query.data)
+        client_telegram_user = await TelegramUser.objects.aget(pk=int(client_telegram_user_pk.group(1)))
+        await update.effective_chat.send_message(str(client_telegram_user))
+        return UserOrAdminEnum.ADMIN.value
 
     def __user_panel_handler(self) -> BaseHandler:
         return MessageHandler(filters.Regex(f"^{button_values['user_panel']}$") & (self.bot.admin_filter or None),
