@@ -296,7 +296,6 @@ class Client(models.Model):
                           total_flow: int = None, ip_limit: int = None, enable: bool = None,
                           expire_time: datetime = None, price: int = None):
         self.__dict__.update({key: value for key, value in locals().items() if value is not None})
-
         client_traffics, client, inbound = panel.update_client(email=self.client_name,
                                                                uuid=str(self.client_uuid),
                                                                inbound_id=self.client_inbound.inbound_id if self.client_inbound else None,
@@ -311,9 +310,15 @@ class Client(models.Model):
         self.get_update_client()
         # self.save()
 
-    async def aset_update_client(self, client_name: str = None, client_uuid: UUID = None, inbound_id: int = None,
-                                 total_flow: int = None, ip_limit: int = None, enable: bool = None,
-                                 expire_time: datetime = None, price: int = None):
+    async def aset_update_client(self,
+                                 client_name: str = None,
+                                 client_uuid: UUID = None,
+                                 inbound_id: int = None,
+                                 total_flow: int = None,
+                                 ip_limit: int = None,
+                                 enable: bool = None,
+                                 expire_time: datetime = None,
+                                 price: int = None):
         return await sync_to_async(self.set_update_client)(
             **{key: value for key, value in locals().items() if (key != 'self' and value is not None)})
 
